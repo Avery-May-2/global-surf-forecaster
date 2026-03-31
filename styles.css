@@ -1,0 +1,121 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel-bg: #ffffff;
+  --ink: #1d2939;
+  --muted: #526277;
+  --accent: #0077b6;
+  --accent-2: #00b4d8;
+  --border: #d0d7e2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: linear-gradient(180deg, #eef4fb 0%, var(--bg) 40%, #fdfefe 100%);
+}
+
+.page-header {
+  padding: 1.5rem 1rem 0.8rem;
+  text-align: center;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.5vw, 2rem);
+}
+
+.page-header p {
+  margin: 0.4rem auto 0;
+  color: var(--muted);
+  max-width: 700px;
+}
+
+.layout {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  grid-template-columns: 2fr 1fr;
+  grid-template-areas:
+    'map controls'
+    'chart controls';
+}
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem;
+  box-shadow: 0 8px 24px rgba(27, 39, 58, 0.08);
+}
+
+.map-panel {
+  grid-area: map;
+  min-height: 360px;
+}
+
+#map {
+  height: 100%;
+  min-height: 360px;
+  border-radius: 10px;
+}
+
+.controls-panel {
+  grid-area: controls;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.controls-panel label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.controls-panel select,
+.controls-panel input[type='range'] {
+  width: 100%;
+}
+
+.card {
+  margin-top: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbff, #eef5ff);
+  padding: 0.75rem;
+  color: #13395a;
+}
+
+.card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.card p {
+  margin: 0.25rem 0;
+  font-size: 0.92rem;
+}
+
+.chart-panel {
+  grid-area: chart;
+}
+
+@media (max-width: 950px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'controls'
+      'map'
+      'chart';
+  }
+
+  .map-panel,
+  #map {
+    min-height: 320px;
+  }
+}
