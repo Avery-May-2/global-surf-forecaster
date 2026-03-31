@@ -43,7 +43,8 @@ body {
   grid-template-columns: 2fr 1fr;
   grid-template-areas:
     'map controls'
-    'chart controls';
+    'chart controls'
+    'byday controls';
 }
 
 .panel {
@@ -105,13 +106,68 @@ body {
   grid-area: chart;
 }
 
+.by-day-panel {
+  grid-area: byday;
+}
+
+.by-day-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.day-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: #f8fbff;
+}
+
+.day-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.day-date {
+  margin: 0.15rem 0 0.45rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.day-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.day-card li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.day-card li strong {
+  color: #00567f;
+}
+
+.day-card li em {
+  color: var(--muted);
+  font-style: normal;
+}
+
 @media (max-width: 950px) {
   .layout {
     grid-template-columns: 1fr;
     grid-template-areas:
       'controls'
       'map'
-      'chart';
+      'chart'
+      'byday';
   }
 
   .map-panel,

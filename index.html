@@ -21,7 +21,7 @@
   <body>
     <header class="page-header">
       <h1>🌊 Global Surf Forecast Dashboard</h1>
-      <p>Explore world-class surf spots and compare upcoming wave windows.</p>
+      <p>Explore world tour surf spots, date-based event windows, and daily wave timing.</p>
     </header>
 
     <main class="layout">
@@ -51,6 +51,11 @@
       <section class="panel chart-panel">
         <h2>Wave Height Forecast (meters)</h2>
         <canvas id="forecast-chart" aria-label="Wave height forecast chart"></canvas>
+      </section>
+
+      <section class="panel by-day-panel">
+        <h2>By-day & Time-of-day Wave Outlook</h2>
+        <div id="by-day-forecast" class="by-day-grid" aria-live="polite"></div>
       </section>
     </main>
 

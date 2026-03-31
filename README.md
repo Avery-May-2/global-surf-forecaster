@@ -1,13 +1,15 @@
 # Global Surf Forecaster
 
-An interactive single-page dashboard for exploring wave forecasts at iconic large surf spots around the world.
+An interactive single-page dashboard for exploring wave forecasts at world-tour-level surf spots around the globe.
 
 ## Features
 
-- Interactive world map with clickable surf spot markers.
-- Forecast controls for surf spot, forecast window (1-7 days), and rider skill level.
+- Interactive world map with clickable markers for Championship Tour surf spots.
+- Forecast controls for surf spot, forecast window, and rider skill level.
+- Date-based event windows shown on markers and in the conditions summary.
 - Dynamic wave-height chart that updates with every interaction.
 - Conditions summary card with average wave height, peak day, swell period, wind, and skill suitability.
+- By-day breakdown panel with time-of-day wave outlook (Early AM, Midday, Afternoon, Evening).
 
 ## Run locally
 
