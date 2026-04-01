@@ -35,7 +35,11 @@
         <label for="spot-select">Surf Spot</label>
         <select id="spot-select"></select>
 
-        <label for="window-range">Forecast Window: <span id="window-value">6</span> days</label>
+        <label for="window-range">
+          Forecast Window:
+          <span id="window-value">6</span> days
+          <span id="window-dates" class="muted-inline">(today + 5 days)</span>
+        </label>
         <input id="window-range" type="range" min="1" max="6" value="6" />
 
         <label for="skill-level">Rider Skill</label>
@@ -88,6 +92,6 @@
       crossorigin=""
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
