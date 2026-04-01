@@ -126,6 +126,7 @@ if (hasLeaflet) {
 const selectSpot = document.getElementById('spot-select');
 const windowRange = document.getElementById('window-range');
 const windowValue = document.getElementById('window-value');
+const windowDates = document.getElementById('window-dates');
 const skillLevel = document.getElementById('skill-level');
 const summaryCard = document.getElementById('conditions-summary');
 const byDayContainer = document.getElementById('by-day-forecast');
@@ -147,6 +148,17 @@ function dateIsoFromNow(offsetDays) {
   const utc = new Date();
   const d = new Date(Date.UTC(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate() + offsetDays));
   return d.toISOString().slice(0, 10);
+}
+
+function updateWindowDateLabel(days) {
+  if (!windowDates) return;
+  const spanDays = Math.max(days - 1, 0);
+  if (spanDays === 0) {
+    windowDates.textContent = '(today only)';
+    return;
+  }
+
+  windowDates.textContent = `(${dateIsoFromNow(0)} to ${dateIsoFromNow(spanDays)})`;
 }
 
 function groupByDay(hourlyTimes, heights, periods) {
@@ -405,6 +417,7 @@ async function refreshDashboard() {
   const spot = surfSpots.find((s) => s.id === activeSpotId);
   const selectedDays = Math.min(Number(windowRange.value), FORECAST_DAYS);
   windowValue.textContent = String(selectedDays);
+  updateWindowDateLabel(selectedDays);
 
   summaryCard.innerHTML = '<p>Loading latest marine forecast…</p>';
 
@@ -450,6 +463,7 @@ surfSpots.forEach((spot) => {
 windowRange.max = String(FORECAST_DAYS);
 windowRange.value = String(FORECAST_DAYS);
 windowValue.textContent = String(FORECAST_DAYS);
+updateWindowDateLabel(FORECAST_DAYS);
 
 selectSpot.addEventListener('change', (event) => {
   activeSpotId = event.target.value;
