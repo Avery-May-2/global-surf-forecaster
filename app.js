@@ -55,7 +55,7 @@ const surfSpots = [
   },
   {
     id: 'teahupoo',
-    name: "Stop No. 7 — Teahupo\'o, Tahiti, French Polynesia",
+    name: "Stop No. 7 — Teahupo'o, Tahiti, French Polynesia",
     lat: -17.833,
     lng: -149.267,
     wind: 'SE 9 kn',
@@ -129,9 +129,14 @@ const windowValue = document.getElementById('window-value');
 const skillLevel = document.getElementById('skill-level');
 const summaryCard = document.getElementById('conditions-summary');
 const byDayContainer = document.getElementById('by-day-forecast');
+const hourlyDaySelect = document.getElementById('hourly-day-select');
+const mctRankings = document.getElementById('mct-rankings');
+const wctRankings = document.getElementById('wct-rankings');
 
 let activeSpotId = surfSpots[0].id;
-let chart;
+let dailyChart;
+let hourlyChart;
+let latestForecast = [];
 
 function formatDateLabel(dateStr) {
   const date = new Date(`${dateStr}T00:00:00Z`);
@@ -157,10 +162,7 @@ function groupByDay(hourlyTimes, heights, periods) {
 
     buckets.get(date).push({
       hour,
-      label: new Date(`${date}T${hourStr}:00Z`).toLocaleTimeString(undefined, {
-        hour: 'numeric',
-        minute: '2-digit'
-      }),
+      label: `${String(hour).padStart(2, '0')}:00`,
       height: heights[idx],
       period: periods[idx]
     });
@@ -177,7 +179,8 @@ function groupByDay(hourlyTimes, heights, periods) {
       dayLabel: formatDateLabel(date),
       height: Number(dayHeight.toFixed(2)),
       period: Number(dayPeriod.toFixed(1)),
-      sessions: sample
+      sessions: sample.map((s) => ({ label: s.label, hour: s.hour, height: Number(s.height.toFixed(2)), period: Number(s.period.toFixed(1)) })),
+      compactSessions: sample
         .filter((_, i) => i % 3 === 0)
         .slice(0, 6)
         .map((s) => ({ label: s.label, height: Number(s.height.toFixed(2)), period: Number(s.period.toFixed(1)) }))
@@ -226,7 +229,7 @@ function updateSummary(spot, forecast, skill) {
   `;
 }
 
-function renderChart(forecast, spotName) {
+function renderDailyChart(forecast, spotName) {
   if (!hasChartJs) {
     const chartEl = document.getElementById('forecast-chart');
     chartEl.replaceWith(Object.assign(document.createElement('p'), {
@@ -238,10 +241,10 @@ function renderChart(forecast, spotName) {
   const labels = forecast.map((entry) => entry.dayLabel);
   const heights = forecast.map((entry) => entry.height);
 
-  if (chart) chart.destroy();
+  if (dailyChart) dailyChart.destroy();
 
   const ctx = document.getElementById('forecast-chart');
-  chart = new Chart(ctx, {
+  dailyChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
@@ -256,21 +259,53 @@ function renderChart(forecast, spotName) {
         pointRadius: 4
       }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: { legend: { labels: { color: '#e2e8f0' } } },
-      scales: {
-        x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
-        y: {
-          beginAtZero: true,
-          ticks: { color: '#cbd5e1' },
-          title: { display: true, text: 'Meters', color: '#e2e8f0' },
-          grid: { color: 'rgba(148, 163, 184, 0.2)' }
-        }
+    options: chartOptions('Meters')
+  });
+}
+
+function renderHourlyChart(day) {
+  if (!hasChartJs) return;
+
+  const labels = day.sessions.map((session) => session.label);
+  const heights = day.sessions.map((session) => session.height);
+
+  if (hourlyChart) hourlyChart.destroy();
+
+  const ctx = document.getElementById('hourly-chart');
+  hourlyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: `${day.dayLabel} - Hourly Wave Height (m)`,
+        data: heights,
+        borderColor: '#22d3ee',
+        backgroundColor: 'rgba(34, 211, 238, 0.18)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.24,
+        pointRadius: 3
+      }]
+    },
+    options: chartOptions('Meters')
+  });
+}
+
+function chartOptions(yTitle) {
+  return {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: '#e2e8f0' } } },
+    scales: {
+      x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
+      y: {
+        beginAtZero: true,
+        ticks: { color: '#cbd5e1' },
+        title: { display: true, text: yTitle, color: '#e2e8f0' },
+        grid: { color: 'rgba(148, 163, 184, 0.2)' }
       }
     }
-  });
+  };
 }
 
 function renderByDay(forecast) {
@@ -280,13 +315,88 @@ function renderByDay(forecast) {
         <h3>${day.dayLabel}</h3>
         <p class="day-date">${day.date}</p>
         <ul>
-          ${day.sessions
+          ${day.compactSessions
             .map((session) => `<li><span>${session.label}</span><strong>${session.height} m</strong><em>${session.period}s</em></li>`)
             .join('')}
         </ul>
       </article>
     `)
     .join('');
+}
+
+function renderHourlyDayPicker(forecast) {
+  const previous = hourlyDaySelect.value;
+  hourlyDaySelect.innerHTML = '';
+
+  forecast.forEach((day, idx) => {
+    const option = document.createElement('option');
+    option.value = String(idx);
+    option.textContent = `${day.dayLabel} (${day.date})`;
+    hourlyDaySelect.appendChild(option);
+  });
+
+  const selected = previous && Number(previous) < forecast.length ? Number(previous) : 0;
+  hourlyDaySelect.value = String(selected);
+  renderHourlyChart(forecast[selected]);
+}
+
+function parseRankingsFromText(text) {
+  const rows = [];
+  const regex = /"rank"\s*:\s*(\d+).*?"fullName"\s*:\s*"([^"]+)".*?"points"\s*:\s*([\d.]+)/g;
+  let match;
+  while ((match = regex.exec(text)) && rows.length < 20) {
+    rows.push({ rank: match[1], surfer: match[2], points: String(Math.round(Number(match[3]))) });
+  }
+  return rows;
+}
+
+async function fetchWslRankings(tour) {
+  const primaryUrl = `https://r.jina.ai/http://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`;
+  const response = await fetch(primaryUrl);
+  if (!response.ok) {
+    throw new Error(`Rankings source returned ${response.status}`);
+  }
+  const text = await response.text();
+  const parsed = parseRankingsFromText(text);
+  if (!parsed.length) {
+    throw new Error('No ranking rows detected');
+  }
+  return parsed;
+}
+
+function renderRankingTable(el, rows) {
+  if (!rows.length) {
+    el.innerHTML = '<p class="muted">Unable to load rankings right now.</p>';
+    return;
+  }
+
+  const html = `
+    <table>
+      <thead><tr><th>Rank</th><th>Surfer</th><th>Points</th></tr></thead>
+      <tbody>
+        ${rows.map((row) => `<tr><td>${row.rank}</td><td>${row.surfer}</td><td>${row.points}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+  el.innerHTML = html;
+}
+
+async function loadRankings() {
+  mctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
+  wctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
+
+  const fallbackRows = [
+    { rank: '-', surfer: 'Rankings temporarily unavailable', points: '-' }
+  ];
+
+  try {
+    const [men, women] = await Promise.all([fetchWslRankings('mct'), fetchWslRankings('wct')]);
+    renderRankingTable(mctRankings, men);
+    renderRankingTable(wctRankings, women);
+  } catch (error) {
+    renderRankingTable(mctRankings, fallbackRows);
+    renderRankingTable(wctRankings, fallbackRows);
+  }
 }
 
 async function refreshDashboard() {
@@ -298,13 +408,17 @@ async function refreshDashboard() {
 
   try {
     const forecast = await fetchMarineForecast(spot, selectedDays, skillLevel.value);
+    latestForecast = forecast;
     updateSummary(spot, forecast, skillLevel.value);
-    renderChart(forecast, spot.name);
+    renderDailyChart(forecast, spot.name);
+    renderHourlyDayPicker(forecast);
     renderByDay(forecast);
   } catch (error) {
     summaryCard.innerHTML = `<p>Unable to load live forecast right now. ${error.message}</p>`;
     byDayContainer.innerHTML = '';
-    if (chart) chart.destroy();
+    hourlyDaySelect.innerHTML = '';
+    if (dailyChart) dailyChart.destroy();
+    if (hourlyChart) hourlyChart.destroy();
   }
 }
 
@@ -347,6 +461,13 @@ selectSpot.addEventListener('change', (event) => {
 
 windowRange.addEventListener('input', refreshDashboard);
 skillLevel.addEventListener('change', refreshDashboard);
+hourlyDaySelect.addEventListener('change', (event) => {
+  const idx = Number(event.target.value);
+  if (latestForecast[idx]) {
+    renderHourlyChart(latestForecast[idx]);
+  }
+});
 
 selectSpot.value = activeSpotId;
 refreshDashboard();
+loadRankings();
