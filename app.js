@@ -110,10 +110,18 @@ const surfSpots = [
 ];
 
 const FORECAST_DAYS = 6;
-const map = L.map('map').setView([8, -15], 2);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
+const hasLeaflet = typeof window.L !== 'undefined';
+const hasChartJs = typeof window.Chart !== 'undefined';
+let map = null;
+
+if (hasLeaflet) {
+  map = L.map('map').setView([8, -15], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+} else {
+  document.getElementById('map').innerHTML = '<p style="padding:1rem;color:#cbd5e1;">Map library failed to load. Forecast controls and charts are still available.</p>';
+}
 
 const selectSpot = document.getElementById('spot-select');
 const windowRange = document.getElementById('window-range');
@@ -219,6 +227,14 @@ function updateSummary(spot, forecast, skill) {
 }
 
 function renderChart(forecast, spotName) {
+  if (!hasChartJs) {
+    const chartEl = document.getElementById('forecast-chart');
+    chartEl.replaceWith(Object.assign(document.createElement('p'), {
+      textContent: 'Chart library failed to load. Daily heights are still listed below.'
+    }));
+    return;
+  }
+
   const labels = forecast.map((entry) => entry.dayLabel);
   const heights = forecast.map((entry) => entry.height);
 
@@ -300,6 +316,8 @@ surfSpots.forEach((spot) => {
   option.textContent = spot.name;
   selectSpot.appendChild(option);
 
+  if (!hasLeaflet) return;
+
   const marker = L.marker([spot.lat, spot.lng])
     .addTo(map)
     .bindPopup(`<strong>${spot.name}</strong><br/>Window: ${formatDateLabel(spot.eventWindowStart)} - ${formatDateLabel(spot.eventWindowEnd)}`);
@@ -320,8 +338,10 @@ windowValue.textContent = String(FORECAST_DAYS);
 selectSpot.addEventListener('change', (event) => {
   activeSpotId = event.target.value;
   const spot = surfSpots.find((s) => s.id === activeSpotId);
-  map.flyTo([spot.lat, spot.lng], 5, { duration: 1 });
-  markers.get(spot.id).openPopup();
+  if (hasLeaflet && map) {
+    map.flyTo([spot.lat, spot.lng], 5, { duration: 1 });
+    markers.get(spot.id)?.openPopup();
+  }
   refreshDashboard();
 });
 
