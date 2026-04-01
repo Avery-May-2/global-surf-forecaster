@@ -53,6 +53,7 @@ body {
 
 .controls-panel { grid-area: controls; display: flex; flex-direction: column; gap: 0.6rem; }
 .controls-panel label { font-weight: 600; font-size: 0.92rem; color: #cbd5e1; }
+.muted-inline { color: var(--muted); font-size: 0.78rem; margin-left: 0.35rem; }
 .controls-panel select,
 .controls-panel input[type='range'],
 .hourly-head select {

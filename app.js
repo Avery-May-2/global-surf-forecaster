@@ -126,6 +126,7 @@ if (hasLeaflet) {
 const selectSpot = document.getElementById('spot-select');
 const windowRange = document.getElementById('window-range');
 const windowValue = document.getElementById('window-value');
+const windowDates = document.getElementById('window-dates');
 const skillLevel = document.getElementById('skill-level');
 const summaryCard = document.getElementById('conditions-summary');
 const byDayContainer = document.getElementById('by-day-forecast');
@@ -147,6 +148,17 @@ function dateIsoFromNow(offsetDays) {
   const utc = new Date();
   const d = new Date(Date.UTC(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate() + offsetDays));
   return d.toISOString().slice(0, 10);
+}
+
+function updateWindowDateLabel(days) {
+  if (!windowDates) return;
+  const spanDays = Math.max(days - 1, 0);
+  if (spanDays === 0) {
+    windowDates.textContent = '(today only)';
+    return;
+  }
+
+  windowDates.textContent = `(${dateIsoFromNow(0)} to ${dateIsoFromNow(spanDays)})`;
 }
 
 function groupByDay(hourlyTimes, heights, periods) {
@@ -193,16 +205,28 @@ async function fetchMarineForecast(spot, days, skill) {
   const startDate = dateIsoFromNow(0);
   const endDate = dateIsoFromNow(days - 1);
 
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lng}&hourly=wave_height,wave_period&timezone=UTC&start_date=${startDate}&end_date=${endDate}`;
-  const response = await fetch(url);
+  const params = new URLSearchParams({
+    latitude: String(spot.lat),
+    longitude: String(spot.lng),
+    hourly: 'wave_height,wave_period',
+    timezone: 'UTC',
+    start_date: startDate,
+    end_date: endDate
+  });
+
+  const response = await fetch(`https://marine-api.open-meteo.com/v1/marine?${params.toString()}`);
   if (!response.ok) {
-    throw new Error(`Forecast API returned ${response.status}`);
+    throw new Error(`Marine API returned ${response.status}`);
   }
 
   const data = await response.json();
   const times = data?.hourly?.time ?? [];
   const waveHeights = (data?.hourly?.wave_height ?? []).map((h) => (h ?? 0.5) * skillAdjustments[skill]);
   const wavePeriods = (data?.hourly?.wave_period ?? []).map((p) => p ?? 8);
+
+  if (!times.length || !waveHeights.length || !wavePeriods.length) {
+    throw new Error('Marine API returned no hourly wave data');
+  }
 
   return groupByDay(times, waveHeights, wavePeriods).slice(0, days);
 }
@@ -405,6 +429,7 @@ async function refreshDashboard() {
   const spot = surfSpots.find((s) => s.id === activeSpotId);
   const selectedDays = Math.min(Number(windowRange.value), FORECAST_DAYS);
   windowValue.textContent = String(selectedDays);
+  updateWindowDateLabel(selectedDays);
 
   summaryCard.innerHTML = '<p>Loading latest marine forecast…</p>';
 
@@ -450,6 +475,7 @@ surfSpots.forEach((spot) => {
 windowRange.max = String(FORECAST_DAYS);
 windowRange.value = String(FORECAST_DAYS);
 windowValue.textContent = String(FORECAST_DAYS);
+updateWindowDateLabel(FORECAST_DAYS);
 
 selectSpot.addEventListener('change', (event) => {
   activeSpotId = event.target.value;
