@@ -1,24 +1,30 @@
-# Global Surf Forecaster
+# Global Surf Forecaster (Streamlit)
 
-An interactive single-page dashboard for exploring wave forecasts at world-tour-level surf spots around the globe.
+An interactive Streamlit dashboard for exploring wave forecasts at world-tour-level surf spots around the globe.
 
 ## Features
 
-- Interactive world map with clickable markers for Championship Tour surf spots.
+- Interactive map with 2026 Championship Tour surf spots.
 - Forecast controls for surf spot, forecast window, and rider skill level.
-- Date-based event windows shown on markers and in the conditions summary.
-- Dynamic wave-height chart that updates with every interaction.
-- Conditions summary card with average wave height, peak day, swell period, wind, and skill suitability.
-- By-day breakdown panel with time-of-day wave outlook (Early AM, Midday, Afternoon, Evening).
+- Daily wave-height forecast chart for the selected spot.
+- New **time-of-day wave chart** for hourly wave height on a selected day.
+- Summary card with event window, wave height stats, swell period, wind, and skill suitability.
+- Right-side panel now filled with **live Championship Tour rankings** for both:
+  - Men (MCT)
+  - Women (WCT)
 
 ## Run locally
 
-Because this is a static app, you can open `index.html` directly in your browser.
-
-For a local server:
-
 ```bash
-python -m http.server 8000
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run streamlit_app.py
 ```
 
-Then visit `http://localhost:8000`.
+Then open the local URL Streamlit prints in your terminal (typically `http://localhost:8501`).
+
+## Notes
+
+- Wave forecast data is sourced live from Open-Meteo Marine API.
+- Rankings are sourced from the World Surf League website pages for the selected tour/year.
