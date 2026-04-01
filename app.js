@@ -216,11 +216,13 @@ function spotSuitability(avgHeight, skill) {
 function updateSummary(spot, forecast, skill) {
   const averageHeight = (forecast.reduce((sum, item) => sum + item.height, 0) / forecast.length).toFixed(2);
   const bestDay = forecast.reduce((best, current) => (current.height > best.height ? current : best));
+  const rollingRangeDays = Math.max(forecast.length - 1, 0);
+  const rollingRangeLabel = rollingRangeDays === 0 ? 'today only' : `today + ${rollingRangeDays} days`;
 
   summaryCard.innerHTML = `
     <h3>${spot.name}</h3>
     <p><strong>Championship window:</strong> ${formatDateLabel(spot.eventWindowStart)} - ${formatDateLabel(spot.eventWindowEnd)}</p>
-    <p><strong>Real-time forecast range:</strong> ${forecast[0].date} to ${forecast[forecast.length - 1].date} (today + 5 days)</p>
+    <p><strong>Real-time forecast range:</strong> ${forecast[0].date} to ${forecast[forecast.length - 1].date} (${rollingRangeLabel})</p>
     <p><strong>Avg wave height:</strong> ${averageHeight} m</p>
     <p><strong>Peak day:</strong> ${bestDay.dayLabel} (${bestDay.height} m)</p>
     <p><strong>Swell period:</strong> ${bestDay.period} s</p>

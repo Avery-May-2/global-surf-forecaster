@@ -276,7 +276,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )
     st.title('🌊 Global Surf Forecast Dashboard')
-    st.caption('Explore 2026 Championship Tour spots, real-time wave forecasts (today + 5 days), and hourly timing.')
+    st.caption('Explore 2026 Championship Tour spots, real-time rolling wave forecasts, and hourly timing.')
 
     left, right = st.columns([2, 1], gap='large')
 
@@ -323,12 +323,14 @@ def main() -> None:
     with right:
         avg_height = round(sum(day['height'] for day in forecast) / max(len(forecast), 1), 2)
         best_day = max(forecast, key=lambda row: row['height'])
+        rolling_range_days = max(len(forecast) - 1, 0)
+        rolling_range_label = 'today only' if rolling_range_days == 0 else f'today + {rolling_range_days} days'
         st.markdown(
             f"""
             <div class="card">
               <h3>{spot.name}</h3>
               <p><strong>Championship window:</strong> {spot.event_window_start} - {spot.event_window_end}</p>
-              <p><strong>Real-time forecast range:</strong> {forecast[0]['date']} to {forecast[-1]['date']} (today + 5 days)</p>
+              <p><strong>Real-time forecast range:</strong> {forecast[0]['date']} to {forecast[-1]['date']} ({rolling_range_label})</p>
               <p><strong>Avg wave height:</strong> {avg_height} m</p>
               <p><strong>Peak day:</strong> {best_day['day_label']} ({best_day['height']} m)</p>
               <p><strong>Swell period:</strong> {best_day['period']} s</p>
