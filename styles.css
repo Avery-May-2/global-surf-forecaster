@@ -1,23 +1,22 @@
 :root {
-  color-scheme: light;
-  --bg: #f4f7fb;
-  --panel-bg: #ffffff;
-  --ink: #1d2939;
-  --muted: #526277;
-  --accent: #0077b6;
-  --accent-2: #00b4d8;
-  --border: #d0d7e2;
+  color-scheme: dark;
+  --bg: #020617;
+  --bg-2: #0b1220;
+  --panel-bg: #0f172a;
+  --ink: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --accent-2: #22d3ee;
+  --border: #1e293b;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--ink);
-  background: linear-gradient(180deg, #eef4fb 0%, var(--bg) 40%, #fdfefe 100%);
+  background: radial-gradient(circle at top, #10203a 0%, var(--bg-2) 30%, var(--bg) 100%);
 }
 
 .page-header {
@@ -25,16 +24,8 @@ body {
   text-align: center;
 }
 
-.page-header h1 {
-  margin: 0;
-  font-size: clamp(1.3rem, 2.5vw, 2rem);
-}
-
-.page-header p {
-  margin: 0.4rem auto 0;
-  color: var(--muted);
-  max-width: 700px;
-}
+.page-header h1 { margin: 0; font-size: clamp(1.3rem, 2.5vw, 2rem); }
+.page-header p { margin: 0.4rem auto 0; color: var(--muted); max-width: 700px; }
 
 .layout {
   display: grid;
@@ -48,67 +39,42 @@ body {
 }
 
 .panel {
-  background: var(--panel-bg);
+  background: linear-gradient(180deg, #0f172a 0%, #0b1220 100%);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.85rem;
-  box-shadow: 0 8px 24px rgba(27, 39, 58, 0.08);
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.65);
 }
 
-.map-panel {
-  grid-area: map;
-  min-height: 360px;
-}
+.map-panel { grid-area: map; min-height: 360px; }
+#map { height: 100%; min-height: 360px; border-radius: 10px; }
 
-#map {
-  height: 100%;
-  min-height: 360px;
-  border-radius: 10px;
-}
-
-.controls-panel {
-  grid-area: controls;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.controls-panel label {
-  font-weight: 600;
-  font-size: 0.92rem;
-}
-
+.controls-panel { grid-area: controls; display: flex; flex-direction: column; gap: 0.6rem; }
+.controls-panel label { font-weight: 600; font-size: 0.92rem; color: #cbd5e1; }
 .controls-panel select,
 .controls-panel input[type='range'] {
   width: 100%;
+  background: #0b1220;
+  color: var(--ink);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.4rem;
 }
 
 .card {
   margin-top: 0.45rem;
-  border: 1px solid var(--border);
+  border: 1px solid #334155;
   border-radius: 10px;
-  background: linear-gradient(180deg, #f8fbff, #eef5ff);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.15), rgba(30, 64, 175, 0.12));
   padding: 0.75rem;
-  color: #13395a;
+  color: #dbeafe;
 }
 
-.card h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-}
+.card h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.card p { margin: 0.25rem 0; font-size: 0.92rem; }
 
-.card p {
-  margin: 0.25rem 0;
-  font-size: 0.92rem;
-}
-
-.chart-panel {
-  grid-area: chart;
-}
-
-.by-day-panel {
-  grid-area: byday;
-}
+.chart-panel { grid-area: chart; }
+.by-day-panel { grid-area: byday; }
 
 .by-day-grid {
   display: grid;
@@ -117,22 +83,14 @@ body {
 }
 
 .day-card {
-  border: 1px solid var(--border);
+  border: 1px solid #334155;
   border-radius: 10px;
   padding: 0.6rem;
-  background: #f8fbff;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
 }
 
-.day-card h3 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.day-date {
-  margin: 0.15rem 0 0.45rem;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
+.day-card h3 { margin: 0; font-size: 0.95rem; }
+.day-date { margin: 0.15rem 0 0.45rem; color: var(--muted); font-size: 0.78rem; }
 
 .day-card ul {
   list-style: none;
@@ -151,23 +109,13 @@ body {
   font-size: 0.82rem;
 }
 
-.day-card li strong {
-  color: #00567f;
-}
-
-.day-card li em {
-  color: var(--muted);
-  font-style: normal;
-}
+.day-card li strong { color: var(--accent); }
+.day-card li em { color: var(--muted); font-style: normal; }
 
 @media (max-width: 950px) {
   .layout {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      'controls'
-      'map'
-      'chart'
-      'byday';
+    grid-template-areas: 'controls' 'map' 'chart' 'byday';
   }
 
   .map-panel,
