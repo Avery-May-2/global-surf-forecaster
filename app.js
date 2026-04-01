@@ -1,3 +1,5 @@
+import { fetchWeatherApi } from 'https://esm.sh/openmeteo@1.1.4';
+
 const surfSpots = [
   {
     id: 'bells',
@@ -204,17 +206,28 @@ async function fetchMarineForecast(spot, days, skill) {
   const skillAdjustments = { beginner: 0.7, intermediate: 1, advanced: 1.25 };
   const startDate = dateIsoFromNow(0);
   const endDate = dateIsoFromNow(days - 1);
+  const responses = await fetchWeatherApi('https://marine-api.open-meteo.com/v1/marine', {
+    latitude: spot.lat,
+    longitude: spot.lng,
+    hourly: ['wave_height', 'wave_period'],
+    timezone: 'UTC',
+    start_date: startDate,
+    end_date: endDate
+  });
 
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lng}&hourly=wave_height,wave_period&timezone=UTC&start_date=${startDate}&end_date=${endDate}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Forecast API returned ${response.status}`);
-  }
+  const response = responses[0];
+  const hourly = response.hourly();
+  if (!hourly) return [];
 
-  const data = await response.json();
-  const times = data?.hourly?.time ?? [];
-  const waveHeights = (data?.hourly?.wave_height ?? []).map((h) => (h ?? 0.5) * skillAdjustments[skill]);
-  const wavePeriods = (data?.hourly?.wave_period ?? []).map((p) => p ?? 8);
+  const utcOffsetSeconds = response.utcOffsetSeconds();
+  const count = (Number(hourly.timeEnd()) - Number(hourly.time())) / hourly.interval();
+  const times = Array.from({ length: count }, (_, i) => {
+    const epochSeconds = Number(hourly.time()) + i * hourly.interval() + utcOffsetSeconds;
+    return new Date(epochSeconds * 1000).toISOString().slice(0, 16);
+  });
+
+  const waveHeights = Array.from(hourly.variables(0)?.valuesArray() ?? []).map((h) => (h ?? 0.5) * skillAdjustments[skill]);
+  const wavePeriods = Array.from(hourly.variables(1)?.valuesArray() ?? []).map((p) => p ?? 8);
 
   return groupByDay(times, waveHeights, wavePeriods).slice(0, days);
 }
