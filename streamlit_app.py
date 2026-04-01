@@ -213,56 +213,131 @@ def render_rankings(title: str, rows: list[dict[str, str]]) -> None:
 
 def main() -> None:
     st.set_page_config(page_title='Global Surf Forecast Dashboard', layout='wide')
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            color: #e2e8f0;
+            background: radial-gradient(circle at top, #10203a 0%, #0b1220 30%, #020617 100%);
+        }
+        .main .block-container {
+            padding-top: 1.2rem;
+            padding-bottom: 1rem;
+            max-width: 1200px;
+        }
+        .panel {
+            background: linear-gradient(180deg, #0f172a 0%, #0b1220 100%);
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            padding: 0.85rem;
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.65);
+            margin-bottom: 1rem;
+        }
+        .panel h3 {
+            margin: 0 0 0.5rem 0;
+            color: #e2e8f0;
+        }
+        .muted {
+            color: #94a3b8;
+        }
+        .card {
+            margin-top: 0.45rem;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: linear-gradient(180deg, rgba(14, 165, 233, 0.15), rgba(30, 64, 175, 0.12));
+            padding: 0.75rem;
+            color: #dbeafe;
+        }
+        .day-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 0.75rem;
+        }
+        .day-card {
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 0.6rem;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+        }
+        .day-card h4 { margin: 0; font-size: 0.95rem; color: #e2e8f0; }
+        .day-date { margin: 0.15rem 0 0.45rem; color: #94a3b8; font-size: 0.78rem; }
+        .day-card ul { list-style: none; margin: 0; padding: 0; }
+        .day-card li {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.45rem;
+            font-size: 0.82rem;
+            margin: 0.2rem 0;
+        }
+        .day-card li strong { color: #38bdf8; }
+        .day-card li em { color: #94a3b8; font-style: normal; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.title('🌊 Global Surf Forecast Dashboard')
-    st.caption('Explore 2026 Championship Tour spots, live marine forecasts, wave-by-hour charts, and live WSL rankings.')
+    st.caption('Explore 2026 Championship Tour spots, real-time wave forecasts (today + 5 days), and hourly timing.')
 
-    left, right = st.columns([2.1, 1], gap='large')
+    left, right = st.columns([2, 1], gap='large')
 
-    with left:
-        spot = st.selectbox('Surf Spot', SURF_SPOTS, format_func=lambda s: s.name)
+    with right:
+        st.markdown('<div class="panel"><h3>Forecast Controls</h3></div>', unsafe_allow_html=True)
+        spot = st.selectbox('Surf Spot', SURF_SPOTS, format_func=lambda s: s.name, label_visibility='visible')
         days = st.slider('Forecast Window (days)', min_value=1, max_value=6, value=6)
         skill = st.selectbox('Rider Skill', list(SKILL_ADJUSTMENTS.keys()), index=1)
 
+    try:
+        forecast = fetch_marine_forecast(spot, days, skill)
+    except Exception as exc:
+        st.error(f'Unable to load live forecast right now: {exc}')
+        return
+
+    with left:
+        st.markdown('<div class="panel"><h3>Map</h3></div>', unsafe_allow_html=True)
         map_points = [{'lat': s.lat, 'lon': s.lng} for s in SURF_SPOTS]
         st.map(map_points, size=18)
 
-        try:
-            forecast = fetch_marine_forecast(spot, days, skill)
-        except Exception as exc:
-            st.error(f'Unable to load live forecast right now: {exc}')
-            return
+        st.markdown('<div class="panel"><h3>Wave Height Forecast (meters)</h3></div>', unsafe_allow_html=True)
+        st.vega_lite_chart(daily_chart_data(forecast, spot.name), use_container_width=True)
 
+        by_day_cards: list[str] = []
+        for day in forecast:
+            sessions = day['sessions'][::3][:6]
+            items = ''.join(
+                f"<li><span>{dt.datetime.strptime(s['iso'], '%Y-%m-%dT%H:%M').strftime('%-I:%M %p')}</span>"
+                f"<strong>{s['height']:.2f}m</strong><em>{s['period']:.1f}s</em></li>"
+                for s in sessions
+            )
+            by_day_cards.append(
+                f"""
+                <div class="day-card">
+                    <h4>{day['day_label']}</h4>
+                    <p class="day-date">{day['date']}</p>
+                    <ul>{items}</ul>
+                </div>
+                """
+            )
+        st.markdown('<div class="panel"><h3>By-day &amp; Time-of-day Wave Outlook</h3></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="day-grid">{"".join(by_day_cards)}</div>', unsafe_allow_html=True)
+
+    with right:
         avg_height = round(sum(day['height'] for day in forecast) / max(len(forecast), 1), 2)
         best_day = max(forecast, key=lambda row: row['height'])
         st.markdown(
-            '\n'.join(
-                [
-                    f"**{spot.name}**",
-                    f"- **Championship window:** {spot.event_window_start} to {spot.event_window_end}",
-                    f"- **Real-time forecast range:** {forecast[0]['date']} to {forecast[-1]['date']}",
-                    f"- **Avg wave height:** {avg_height} m",
-                    f"- **Peak day:** {best_day['day_label']} ({best_day['height']} m)",
-                    f"- **Swell period:** {best_day['period']} s",
-                    f"- **Wind:** {spot.wind}",
-                    f"- **Suitability:** {spot_suitability(avg_height, skill)}",
-                ]
-            )
+            f"""
+            <div class="card">
+              <h3>{spot.name}</h3>
+              <p><strong>Championship window:</strong> {spot.event_window_start} - {spot.event_window_end}</p>
+              <p><strong>Real-time forecast range:</strong> {forecast[0]['date']} to {forecast[-1]['date']} (today + 5 days)</p>
+              <p><strong>Avg wave height:</strong> {avg_height} m</p>
+              <p><strong>Peak day:</strong> {best_day['day_label']} ({best_day['height']} m)</p>
+              <p><strong>Swell period:</strong> {best_day['period']} s</p>
+              <p><strong>Wind:</strong> {spot.wind}</p>
+              <p><strong>Suitability:</strong> {spot_suitability(avg_height, skill)}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-
-        st.subheader('Wave Height Forecast (meters)')
-        st.vega_lite_chart(daily_chart_data(forecast, spot.name), use_container_width=True)
-
-        st.subheader('Wave by Time of Day (selected date)')
-        selected_date = st.selectbox('Choose date for hourly wave chart', forecast, format_func=lambda day: f"{day['day_label']} ({day['date']})")
-        st.vega_lite_chart(hourly_chart_data(selected_date), use_container_width=True)
-
-    with right:
-        st.markdown('### Live Championship Tour Rankings (2026)')
-        mens = fetch_wsl_rankings('mct', year=2026)
-        womens = fetch_wsl_rankings('wct', year=2026)
-        render_rankings('Men (MCT)', mens)
-        render_rankings('Women (WCT)', womens)
-        st.caption('Source: worldsurfleague.com/athletes/tour/mct?year=2026 and /wct?year=2026')
 
 
 if __name__ == '__main__':
