@@ -21,7 +21,7 @@
   <body>
     <header class="page-header">
       <h1>🌊 Global Surf Forecast Dashboard</h1>
-      <p>Explore 2026 Championship Tour spots, real-time wave forecasts (today + 5 days), and hourly timing.</p>
+      <p>Explore 2026 Championship Tour spots, real-time wave forecasts (today + 5 days), hourly timing, and live rankings.</p>
     </header>
 
     <main class="layout">
@@ -53,9 +53,32 @@
         <canvas id="forecast-chart" aria-label="Wave height forecast chart"></canvas>
       </section>
 
+      <section class="panel hourly-panel">
+        <div class="hourly-head">
+          <h2>Time-of-day Wave Chart</h2>
+          <label for="hourly-day-select">Day</label>
+          <select id="hourly-day-select" aria-label="Pick day for time-of-day chart"></select>
+        </div>
+        <canvas id="hourly-chart" aria-label="Hourly wave chart"></canvas>
+      </section>
+
       <section class="panel by-day-panel">
         <h2>By-day & Time-of-day Wave Outlook</h2>
         <div id="by-day-forecast" class="by-day-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel rankings-panel">
+        <h2>Live Championship Tour Rankings (2026)</h2>
+        <div class="rankings-grid">
+          <article>
+            <h3>Men (MCT)</h3>
+            <div id="mct-rankings" class="table-wrap" aria-live="polite"></div>
+          </article>
+          <article>
+            <h3>Women (WCT)</h3>
+            <div id="wct-rankings" class="table-wrap" aria-live="polite"></div>
+          </article>
+        </div>
       </section>
     </main>
 
