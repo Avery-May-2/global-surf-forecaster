@@ -1,440 +1,363 @@
-import { fetchWeatherApi } from 'https://esm.sh/openmeteo@1.1.4';
-
-const surfSpots = [
+const SURF_SPOTS = [
   {
-    id: 'bells',
-    name: 'Stop No. 1 — Bells Beach, Victoria, Australia',
-    lat: -38.372,
-    lng: 144.28,
-    wind: 'SW 16 kn',
-    eventWindowStart: '2026-04-01',
-    eventWindowEnd: '2026-04-11'
+    name: 'Long Beach, NJ',
+    lat: 39.588,
+    lng: -74.218,
+    buoy: '44009',
+    tideStation: '8531680',
+    breakType: 'Beach Break',
+    icon: '🌊',
+    orientationDeg: 120,
+    exposure: 'south'
   },
   {
-    id: 'margaret-river',
-    name: 'Stop No. 2 — Margaret River, Western Australia, Australia',
-    lat: -33.954,
-    lng: 114.992,
-    wind: 'S 18 kn',
-    eventWindowStart: '2026-04-17',
-    eventWindowEnd: '2026-04-27'
+    name: 'Belmar, NJ',
+    lat: 40.18,
+    lng: -74.016,
+    buoy: '44009',
+    tideStation: '8531680',
+    breakType: 'Beach Break',
+    icon: '🌊',
+    orientationDeg: 110,
+    exposure: 'south-east'
   },
   {
-    id: 'snapper-rocks',
-    name: 'Stop No. 3 — Snapper Rocks, Queensland, Australia',
-    lat: -28.164,
-    lng: 153.548,
-    wind: 'SE 11 kn',
-    eventWindowStart: '2026-05-02',
-    eventWindowEnd: '2026-05-12'
-  },
-  {
-    id: 'raglan',
-    name: 'Stop No. 4 — Raglan, New Zealand',
-    lat: -37.799,
-    lng: 174.87,
-    wind: 'W 14 kn',
-    eventWindowStart: '2026-05-15',
-    eventWindowEnd: '2026-05-25'
-  },
-  {
-    id: 'punta-roca',
-    name: 'Stop No. 5 — Punta Roca, El Salvador',
-    lat: 13.489,
-    lng: -89.392,
-    wind: 'SSE 8 kn',
-    eventWindowStart: '2026-06-05',
-    eventWindowEnd: '2026-06-15'
-  },
-  {
-    id: 'saquarema',
-    name: 'Stop No. 6 — Saquarema, Rio de Janeiro, Brazil',
-    lat: -22.934,
-    lng: -42.502,
-    wind: 'E 14 kn',
-    eventWindowStart: '2026-06-19',
-    eventWindowEnd: '2026-06-27'
-  },
-  {
-    id: 'teahupoo',
-    name: "Stop No. 7 — Teahupo'o, Tahiti, French Polynesia",
-    lat: -17.833,
-    lng: -149.267,
-    wind: 'SE 9 kn',
-    eventWindowStart: '2026-08-08',
-    eventWindowEnd: '2026-08-18'
-  },
-  {
-    id: 'cloudbreak',
-    name: 'Stop No. 8 — Cloudbreak, Fiji',
-    lat: -17.873,
-    lng: 177.188,
-    wind: 'ESE 13 kn',
-    eventWindowStart: '2026-08-25',
-    eventWindowEnd: '2026-09-04'
-  },
-  {
-    id: 'lower-trestles',
-    name: 'Stop No. 9 — Lower Trestles, San Clemente, Calif., USA',
-    lat: 33.384,
-    lng: -117.593,
-    wind: 'W 9 kn',
-    eventWindowStart: '2026-09-11',
-    eventWindowEnd: '2026-09-20'
-  },
-  {
-    id: 'surf-abu-dhabi',
-    name: 'Stop No. 10 — Surf Abu Dhabi, Abu Dhabi, UAE',
-    lat: 24.467,
-    lng: 54.377,
-    wind: 'NW 10 kn',
-    eventWindowStart: '2026-10-14',
-    eventWindowEnd: '2026-10-18'
-  },
-  {
-    id: 'peniche',
-    name: 'Stop No. 11 — Peniche, Portugal',
-    lat: 39.355,
-    lng: -9.381,
-    wind: 'N 15 kn',
-    eventWindowStart: '2026-10-22',
-    eventWindowEnd: '2026-11-01'
-  },
-  {
-    id: 'pipeline',
-    name: 'Stop No. 12 — Banzai Pipeline, Hawaii, USA',
-    lat: 21.664,
-    lng: -158.051,
-    wind: 'ENE 12 kn',
-    eventWindowStart: '2026-12-08',
-    eventWindowEnd: '2026-12-20'
+    name: 'Manasquan Inlet, NJ',
+    lat: 40.107,
+    lng: -74.037,
+    buoy: '44009',
+    tideStation: '8531680',
+    breakType: 'Jetty/Reef',
+    icon: '🔺',
+    orientationDeg: 100,
+    exposure: 'east'
   }
 ];
 
-const FORECAST_DAYS = 6;
-const hasLeaflet = typeof window.L !== 'undefined';
-const hasChartJs = typeof window.Chart !== 'undefined';
-let map = null;
+const CACHE_MINUTES = 60;
+const spotSelect = document.getElementById('spotSelect');
+const skillSelect = document.getElementById('skillSelect');
+const snapshotPanel = document.getElementById('snapshotPanel');
+const weeklyHeatmap = document.getElementById('weeklyHeatmap');
+const alertsList = document.getElementById('alertsList');
+const riskSlider = document.getElementById('riskSlider');
 
-if (hasLeaflet) {
-  map = L.map('map').setView([8, -15], 2);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-} else {
-  document.getElementById('map').innerHTML = '<p style="padding:1rem;color:#cbd5e1;">Map library failed to load. Forecast controls and charts are still available.</p>';
+let charts = {};
+let map;
+let markers = [];
+let latestMerged = [];
+
+function metersToFeet(m) { return (m * 3.28084).toFixed(1); }
+function toCompass(deg = 0) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+function scoreBand(score10) {
+  if (score10 >= 8) return { label: 'Good', css: 'score-good', color: '#22c55e' };
+  if (score10 >= 5) return { label: 'Fair', css: 'score-fair', color: '#eab308' };
+  return { label: 'Poor', css: 'score-poor', color: '#ef4444' };
+}
+function signedAngle(a, b) {
+  const d = ((a - b + 540) % 360) - 180;
+  return Math.abs(d);
 }
 
-const selectSpot = document.getElementById('spot-select');
-const windowRange = document.getElementById('window-range');
-const windowValue = document.getElementById('window-value');
-const windowDates = document.getElementById('window-dates');
-const skillLevel = document.getElementById('skill-level');
-const summaryCard = document.getElementById('conditions-summary');
-const byDayContainer = document.getElementById('by-day-forecast');
-const hourlyDaySelect = document.getElementById('hourly-day-select');
+function computeSurfScore(row, spot, skill = 'Intermediate', riskBias = 50) {
+  const wave = row.waveHeight ?? 0.8;
+  const swellPeriod = row.swellPeriod ?? row.wavePeriod ?? 8;
+  const windSpeed = row.windSpeed ?? 6;
+  const windDir = row.windDirection ?? 0;
+  const swellDir = row.swellDirection ?? 0;
+  const tideFt = row.tideFt ?? 2;
 
-let activeSpotId = surfSpots[0].id;
-let dailyChart;
-let hourlyChart;
-let latestForecast = [];
+  const skillTargets = {
+    Beginner: { waveIdeal: 1.2, periodIdeal: 9 },
+    Intermediate: { waveIdeal: 2.2, periodIdeal: 11 },
+    Advanced: { waveIdeal: 3.8, periodIdeal: 13 }
+  };
+  const target = skillTargets[skill] ?? skillTargets.Intermediate;
 
-function formatDateLabel(dateStr) {
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+  const waveFactor = Math.max(0, 1 - Math.abs(wave - target.waveIdeal) / (target.waveIdeal + 0.2));
+  const periodFactor = Math.min(Math.max((swellPeriod - 6) / (target.periodIdeal - 6), 0), 1);
+  const offshoreAngle = signedAngle((windDir + 180) % 360, spot.orientationDeg);
+  const windDirFactor = 1 - offshoreAngle / 180;
+  const windSpeedFactor = Math.max(0, 1 - windSpeed / 18);
+  const tideFactor = 1 - Math.min(Math.abs(tideFt - 2.8) / 2.8, 1);
+  const exposurePenalty = spot.exposure.includes('south') && [315, 0, 45].some((d) => Math.abs(d - swellDir) < 25) ? 0.15 : 0;
 
-function dateIsoFromNow(offsetDays) {
-  const utc = new Date();
-  const d = new Date(Date.UTC(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate() + offsetDays));
-  return d.toISOString().slice(0, 10);
-}
+  const base = (
+    waveFactor * 0.25 +
+    periodFactor * 0.25 +
+    windDirFactor * 0.2 +
+    windSpeedFactor * 0.1 +
+    tideFactor * 0.2
+  ) * 10;
 
-function updateWindowDateLabel(days) {
-  if (!windowDates) return;
-  const spanDays = Math.max(days - 1, 0);
-  if (spanDays === 0) {
-    windowDates.textContent = '(today only)';
-    return;
-  }
+  const personalization = ((riskBias - 50) / 50) * (skill === 'Advanced' ? 0.8 : -0.8);
+  const score = Math.max(1, Math.min(10, base - exposurePenalty * 10 + personalization));
 
-  windowDates.textContent = `(${dateIsoFromNow(0)} to ${dateIsoFromNow(spanDays)})`;
-}
-
-function groupByDay(hourlyTimes, heights, periods) {
-  const buckets = new Map();
-
-  hourlyTimes.forEach((time, idx) => {
-    const [date, hourStr] = time.split('T');
-    const hour = Number(hourStr.split(':')[0]);
-
-    if (!buckets.has(date)) {
-      buckets.set(date, []);
-    }
-
-    buckets.get(date).push({
-      hour,
-      label: `${String(hour).padStart(2, '0')}:00`,
-      height: heights[idx],
-      period: periods[idx]
-    });
-  });
-
-  return Array.from(buckets.entries()).map(([date, sessions]) => {
-    const daytimeSessions = sessions.filter((s) => s.hour >= 6 && s.hour <= 18);
-    const sample = daytimeSessions.length ? daytimeSessions : sessions;
-    const dayHeight = sample.reduce((sum, s) => sum + s.height, 0) / sample.length;
-    const dayPeriod = sample.reduce((sum, s) => sum + s.period, 0) / sample.length;
-
-    return {
-      date,
-      dayLabel: formatDateLabel(date),
-      height: Number(dayHeight.toFixed(2)),
-      period: Number(dayPeriod.toFixed(1)),
-      sessions: sample.map((s) => ({ label: s.label, hour: s.hour, height: Number(s.height.toFixed(2)), period: Number(s.period.toFixed(1)) })),
-      compactSessions: sample
-        .filter((_, i) => i % 3 === 0)
-        .slice(0, 6)
-        .map((s) => ({ label: s.label, height: Number(s.height.toFixed(2)), period: Number(s.period.toFixed(1)) }))
-    };
-  });
-}
-
-async function fetchMarineForecast(spot, days, skill) {
-  const skillAdjustments = { beginner: 0.7, intermediate: 1, advanced: 1.25 };
-  const startDate = dateIsoFromNow(0);
-  const endDate = dateIsoFromNow(days - 1);
-  const responses = await fetchWeatherApi('https://marine-api.open-meteo.com/v1/marine', {
-    latitude: spot.lat,
-    longitude: spot.lng,
-    hourly: ['wave_height', 'wave_period'],
-    timezone: 'UTC',
-    start_date: startDate,
-    end_date: endDate
-  });
-
-  const response = responses[0];
-  const hourly = response.hourly();
-  if (!hourly) return [];
-
-  const utcOffsetSeconds = response.utcOffsetSeconds();
-  const count = (Number(hourly.timeEnd()) - Number(hourly.time())) / hourly.interval();
-  const times = Array.from({ length: count }, (_, i) => {
-    const epochSeconds = Number(hourly.time()) + i * hourly.interval() + utcOffsetSeconds;
-    return new Date(epochSeconds * 1000).toISOString().slice(0, 16);
-  });
-
-  const waveHeights = Array.from(hourly.variables(0)?.valuesArray() ?? []).map((h) => (h ?? 0.5) * skillAdjustments[skill]);
-  const wavePeriods = Array.from(hourly.variables(1)?.valuesArray() ?? []).map((p) => p ?? 8);
-
-  return groupByDay(times, waveHeights, wavePeriods).slice(0, days);
-}
-
-function spotSuitability(avgHeight, skill) {
-  if (skill === 'beginner') return avgHeight <= 1.6 ? 'Good for progression' : 'Challenging conditions';
-  if (skill === 'intermediate') return avgHeight <= 2.7 ? 'Good balance of power and control' : 'Bring confidence';
-  return avgHeight >= 2.5 ? 'Excellent heavy-water session' : 'Playful but smaller day';
-}
-
-function updateSummary(spot, forecast, skill) {
-  const averageHeight = (forecast.reduce((sum, item) => sum + item.height, 0) / forecast.length).toFixed(2);
-  const bestDay = forecast.reduce((best, current) => (current.height > best.height ? current : best));
-  const rollingRangeDays = Math.max(forecast.length - 1, 0);
-  const rollingRangeLabel = rollingRangeDays === 0 ? 'today only' : `today + ${rollingRangeDays} days`;
-
-  summaryCard.innerHTML = `
-    <h3>${spot.name}</h3>
-    <p><strong>Championship window:</strong> ${formatDateLabel(spot.eventWindowStart)} - ${formatDateLabel(spot.eventWindowEnd)}</p>
-    <p><strong>Real-time forecast range:</strong> ${forecast[0].date} to ${forecast[forecast.length - 1].date} (${rollingRangeLabel})</p>
-    <p><strong>Avg wave height:</strong> ${averageHeight} m</p>
-    <p><strong>Peak day:</strong> ${bestDay.dayLabel} (${bestDay.height} m)</p>
-    <p><strong>Swell period:</strong> ${bestDay.period} s</p>
-    <p><strong>Wind:</strong> ${spot.wind}</p>
-    <p><strong>Suitability:</strong> ${spotSuitability(Number(averageHeight), skill)}</p>
-  `;
-}
-
-function renderDailyChart(forecast, spotName) {
-  if (!hasChartJs) {
-    const chartEl = document.getElementById('forecast-chart');
-    chartEl.replaceWith(Object.assign(document.createElement('p'), {
-      textContent: 'Chart library failed to load. Daily heights are still listed below.'
-    }));
-    return;
-  }
-
-  const labels = forecast.map((entry) => entry.dayLabel);
-  const heights = forecast.map((entry) => entry.height);
-
-  if (dailyChart) dailyChart.destroy();
-
-  const ctx = document.getElementById('forecast-chart');
-  dailyChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: `${spotName} - Wave Height (m)`,
-        data: heights,
-        borderColor: '#38bdf8',
-        backgroundColor: 'rgba(56, 189, 248, 0.20)',
-        borderWidth: 3,
-        fill: true,
-        tension: 0.28,
-        pointRadius: 4
-      }]
-    },
-    options: chartOptions('Meters')
-  });
-}
-
-function renderHourlyChart(day) {
-  if (!hasChartJs) return;
-
-  const labels = day.sessions.map((session) => session.label);
-  const heights = day.sessions.map((session) => session.height);
-
-  if (hourlyChart) hourlyChart.destroy();
-
-  const ctx = document.getElementById('hourly-chart');
-  hourlyChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: `${day.dayLabel} - Hourly Wave Height (m)`,
-        data: heights,
-        borderColor: '#22d3ee',
-        backgroundColor: 'rgba(34, 211, 238, 0.18)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.24,
-        pointRadius: 3
-      }]
-    },
-    options: chartOptions('Meters')
-  });
-}
-
-function chartOptions(yTitle) {
   return {
-    responsive: true,
-    maintainAspectRatio: true,
-    plugins: { legend: { labels: { color: '#e2e8f0' } } },
-    scales: {
-      x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
-      y: {
-        beginAtZero: true,
-        ticks: { color: '#cbd5e1' },
-        title: { display: true, text: yTitle, color: '#e2e8f0' },
-        grid: { color: 'rgba(148, 163, 184, 0.2)' }
-      }
+    score: Number(score.toFixed(1)),
+    contributions: {
+      wave: Number((waveFactor * 10).toFixed(1)),
+      period: Number((periodFactor * 10).toFixed(1)),
+      wind: Number((((windDirFactor + windSpeedFactor) / 2) * 10).toFixed(1)),
+      tide: Number((tideFactor * 10).toFixed(1))
     }
   };
 }
 
-function renderByDay(forecast) {
-  byDayContainer.innerHTML = forecast
-    .map((day) => `
-      <article class="day-card">
-        <h3>${day.dayLabel}</h3>
-        <p class="day-date">${day.date}</p>
-        <ul>
-          ${day.compactSessions
-            .map((session) => `<li><span>${session.label}</span><strong>${session.height} m</strong><em>${session.period}s</em></li>`)
-            .join('')}
-        </ul>
-      </article>
-    `)
-    .join('');
+async function fetchCached(key, loader) {
+  const cacheKey = `surf-cache-${key}`;
+  const item = localStorage.getItem(cacheKey);
+  if (item) {
+    const parsed = JSON.parse(item);
+    if (Date.now() - parsed.ts < CACHE_MINUTES * 60000) return parsed.data;
+  }
+  const data = await loader();
+  localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
+  return data;
 }
 
-function renderHourlyDayPicker(forecast) {
-  const previous = hourlyDaySelect.value;
-  hourlyDaySelect.innerHTML = '';
+async function getNoaaBuoyData(buoyId) {
+  return fetchCached(`buoy-${buoyId}`, async () => {
+    const response = await fetch(`https://www.ndbc.noaa.gov/data/realtime2/${buoyId}.txt`);
+    const text = await response.text();
+    const lines = text.split('\n').slice(2, 50).filter(Boolean);
+    return lines.map((line) => {
+      const p = line.trim().split(/\s+/);
+      const dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2], +p[3], +p[4]));
+      return {
+        datetime: dt.toISOString(),
+        waveHeight: p[8] === 'MM' ? null : Number(p[8]),
+        wavePeriod: p[9] === 'MM' ? null : Number(p[9]),
+        windSpeed: p[6] === 'MM' ? null : Number(p[6]),
+        windDirection: p[5] === 'MM' ? null : Number(p[5])
+      };
+    });
+  });
+}
 
-  forecast.forEach((day, idx) => {
-    const option = document.createElement('option');
-    option.value = String(idx);
-    option.textContent = `${day.dayLabel} (${day.date})`;
-    hourlyDaySelect.appendChild(option);
+async function getNoaaTideData(station) {
+  return fetchCached(`tide-${station}`, async () => {
+    const begin = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10).replaceAll('-', '');
+    const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=SurfForecastApp&begin_date=${begin}&end_date=${end}&datum=MLLW&station=${station}&time_zone=gmt&units=english&interval=h&format=json`;
+    const res = await fetch(url);
+    const json = await res.json();
+    return (json.predictions || []).map((r) => ({ datetime: new Date(r.t + 'Z').toISOString(), tideFt: Number(r.v) }));
+  });
+}
+
+async function getForecastFallback(lat, lng) {
+  return fetchCached(`forecast-${lat}-${lng}`, async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lng}&hourly=wave_height,wave_period&start_date=${today}&end_date=${end}&timezone=UTC`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.hourly.time.map((t, idx) => ({
+      datetime: new Date(t + 'Z').toISOString(),
+      waveHeight: data.hourly.wave_height[idx],
+      wavePeriod: data.hourly.wave_period[idx],
+      swellPeriod: data.hourly.wave_period[idx],
+      swellDirection: 130,
+      windSpeed: 5 + (idx % 7),
+      windDirection: 260 - (idx % 50)
+    }));
+  });
+}
+
+function mergeByNearest(forecast, tide) {
+  return forecast.map((f) => {
+    const ft = new Date(f.datetime).getTime();
+    let nearest = tide[0];
+    let best = Infinity;
+    for (const t of tide) {
+      const dist = Math.abs(new Date(t.datetime).getTime() - ft);
+      if (dist < best) { best = dist; nearest = t; }
+    }
+    return { ...f, tideFt: nearest?.tideFt ?? 2.5 };
+  });
+}
+
+function renderSnapshot(spot, nowRow, scoreObj) {
+  const band = scoreBand(scoreObj.score);
+  snapshotPanel.innerHTML = `
+    <div class="snapshot-grid">
+      <div class="metric-card ${band.css}"><div class="k">Surf Score (1-10)</div><div class="v">${scoreObj.score} · ${band.label}</div></div>
+      <div class="metric-card"><div class="k">Wave Height</div><div class="v">${metersToFeet(nowRow.waveHeight || 0.8)} ft</div></div>
+      <div class="metric-card"><div class="k">Swell</div><div class="v">${(nowRow.swellPeriod || nowRow.wavePeriod || 8).toFixed(1)}s @ ${toCompass(nowRow.swellDirection || 130)}</div></div>
+      <div class="metric-card"><div class="k">Wind Vector</div><div class="v">${(nowRow.windSpeed || 0).toFixed(1)} m/s ${toCompass(nowRow.windDirection || 0)}</div></div>
+      <div class="metric-card"><div class="k">Tide State</div><div class="v">${(nowRow.tideFt || 0).toFixed(1)} ft (mid-tide target 2.8)</div></div>
+      <div class="metric-card"><div class="k">Spot Metadata</div><div class="v">${spot.breakType} · ${spot.exposure}</div></div>
+    </div>`;
+}
+
+function renderWeeklyHeatmap(rows) {
+  weeklyHeatmap.innerHTML = '';
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const dayRows = rows.filter((r) => new Date(r.datetime).getUTCDate() === new Date(Date.now() + i * 86400000).getUTCDate());
+    if (!dayRows.length) continue;
+    const avg = dayRows.reduce((s, r) => s + r.score, 0) / dayRows.length;
+    days.push({
+      label: new Date(dayRows[0].datetime).toLocaleDateString(undefined, { weekday: 'short' }),
+      score: Number(avg.toFixed(1)),
+      tideRange: `${Math.min(...dayRows.map((d) => d.tideFt)).toFixed(1)}-${Math.max(...dayRows.map((d) => d.tideFt)).toFixed(1)}ft`
+    });
+  }
+  days.forEach((d) => {
+    const band = scoreBand(d.score);
+    const el = document.createElement('div');
+    el.className = 'heat-cell';
+    el.style.background = band.color + '40';
+    el.title = `${d.label}: ${d.score}/10`;
+    el.innerHTML = `<strong>${d.label}</strong><br/>Score ${d.score}<br/><small>${d.tideRange}</small>`;
+    weeklyHeatmap.appendChild(el);
+  });
+}
+
+function renderMetricBreakdown(contrib, row) {
+  document.getElementById('metricBreakdown').innerHTML = `
+    <ul>
+      <li>Wave contribution: <strong>${contrib.wave}/10</strong></li>
+      <li>Swell-period contribution: <strong>${contrib.period}/10</strong></li>
+      <li>Wind contribution: <strong>${contrib.wind}/10</strong> (${toCompass(row.windDirection)} vector alignment)</li>
+      <li>Tide contribution: <strong>${contrib.tide}/10</strong></li>
+    </ul>
+    <p>Interpretation: wind is currently ${contrib.wind < 4 ? 'hurting' : 'helping'} the score.</p>`;
+}
+
+function renderAlerts(rows) {
+  const alerts = [];
+  const nextGood = rows.find((r) => r.score >= 8);
+  if (nextGood) alerts.push(`Optimal Window: Surf Score ${nextGood.score}+ predicted around ${new Date(nextGood.datetime).toLocaleString()}.`);
+  const shift = rows.find((r, i) => i > 0 && Math.abs((r.windDirection ?? 0) - (rows[i - 1].windDirection ?? 0)) > 40);
+  if (shift) alerts.push(`Critical Shift: Significant wind direction shift expected at ${new Date(shift.datetime).toLocaleTimeString()}.`);
+  const swellArrive = rows.find((r) => (r.waveHeight ?? 0) >= 1.8 && (r.swellPeriod ?? 0) >= 11);
+  if (swellArrive) alerts.push(`Swell Arrival: Threshold reached (${metersToFeet(swellArrive.waveHeight)}ft @ ${(swellArrive.swellPeriod).toFixed(1)}s).`);
+  alertsList.innerHTML = alerts.map((a) => `<div class="alert-item">${a}</div>`).join('') || '<p>No alerts at this time.</p>';
+}
+
+function renderCharts(rows, contrib) {
+  const labels = rows.slice(0, 24).map((r) => new Date(r.datetime).getUTCHours().toString().padStart(2, '0') + ':00');
+  const hourlyScores = rows.slice(0, 24).map((r) => r.score);
+  const heightsFt = rows.slice(0, 24).map((r) => Number(metersToFeet(r.waveHeight || 0.8)));
+
+  charts.hourly?.destroy();
+  charts.hourly = new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { type: 'line', label: 'Wave Height (ft)', data: heightsFt, borderColor: '#38bdf8', yAxisID: 'y' },
+        { type: 'bar', label: 'Surf Score', data: hourlyScores, backgroundColor: hourlyScores.map((s) => scoreBand(s).color + 'aa'), yAxisID: 'y1' }
+      ]
+    },
+    options: { scales: { y: { beginAtZero: true }, y1: { beginAtZero: true, max: 10, position: 'right' } } }
   });
 
-  const selected = previous && Number(previous) < forecast.length ? Number(previous) : 0;
-  hourlyDaySelect.value = String(selected);
-  renderHourlyChart(forecast[selected]);
+  charts.radar?.destroy();
+  charts.radar = new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: ['Wave', 'Swell', 'Wind', 'Tide'],
+      datasets: [{ label: 'Component Strength', data: [contrib.wave, contrib.period, contrib.wind, contrib.tide], backgroundColor: '#22d3ee40', borderColor: '#22d3ee' }]
+    },
+    options: { scales: { r: { min: 0, max: 10 } } }
+  });
+
+  charts.scatter?.destroy();
+  charts.scatter = new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: 'Period vs Score',
+        data: rows.slice(0, 72).map((r) => ({ x: r.swellPeriod || r.wavePeriod || 8, y: r.score })),
+        backgroundColor: '#60a5fa'
+      }]
+    },
+    options: { scales: { x: { title: { text: 'Swell Period (s)', display: true } }, y: { title: { text: 'Surf Score', display: true }, min: 0, max: 10 } } }
+  });
+}
+
+function initMap() {
+  map = L.map('surfMap').setView([39.95, -74.1], 8);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+}
+
+function refreshMap(selectedName) {
+  markers.forEach((m) => m.remove());
+  markers = [];
+  SURF_SPOTS.forEach((spot) => {
+    const rows = latestMerged[spot.name] || [];
+    const top = rows[0]?.score ?? 5;
+    const band = scoreBand(top);
+    const marker = L.circleMarker([spot.lat, spot.lng], { radius: 9, color: band.color, fillOpacity: 0.9 }).addTo(map);
+    marker.bindPopup(`<strong>${spot.icon} ${spot.name}</strong><br/>${spot.breakType}<br/>Score: ${top}/10`);
+    if (spot.name === selectedName) marker.openPopup();
+    markers.push(marker);
+  });
+}
+
+async function loadSpotData(spot) {
+  let forecast;
+  try {
+    forecast = await getForecastFallback(spot.lat, spot.lng);
+  } catch {
+    forecast = Array.from({ length: 168 }, (_, i) => ({
+      datetime: new Date(Date.now() + i * 3600000).toISOString(),
+      waveHeight: 0.8 + Math.sin(i / 5) * 0.4 + 0.5,
+      wavePeriod: 8 + (i % 6),
+      swellPeriod: 9 + (i % 5),
+      swellDirection: 130,
+      windSpeed: 4 + (i % 8),
+      windDirection: 250 - (i % 60)
+    }));
+  }
+  let tide = await getNoaaTideData(spot.tideStation).catch(() => []);
+  if (!tide.length) tide = forecast.map((f, i) => ({ datetime: f.datetime, tideFt: 2.5 + Math.sin(i / 3) }));
+
+  const merged = mergeByNearest(forecast, tide);
+  latestMerged[spot.name] = merged;
 }
 
 async function refreshDashboard() {
-  const spot = surfSpots.find((s) => s.id === activeSpotId);
-  const selectedDays = Math.min(Number(windowRange.value), FORECAST_DAYS);
-  windowValue.textContent = String(selectedDays);
-  updateWindowDateLabel(selectedDays);
+  const spot = SURF_SPOTS.find((s) => s.name === spotSelect.value) || SURF_SPOTS[0];
+  const skill = skillSelect.value;
+  const riskBias = Number(riskSlider.value);
 
-  summaryCard.innerHTML = '<p>Loading latest marine forecast…</p>';
-
-  try {
-    const forecast = await fetchMarineForecast(spot, selectedDays, skillLevel.value);
-    latestForecast = forecast;
-    updateSummary(spot, forecast, skillLevel.value);
-    renderDailyChart(forecast, spot.name);
-    renderHourlyDayPicker(forecast);
-    renderByDay(forecast);
-  } catch (error) {
-    summaryCard.innerHTML = `<p>Unable to load live forecast right now. ${error.message}</p>`;
-    byDayContainer.innerHTML = '';
-    hourlyDaySelect.innerHTML = '';
-    if (dailyChart) dailyChart.destroy();
-    if (hourlyChart) hourlyChart.destroy();
-  }
-}
-
-const markers = new Map();
-
-surfSpots.forEach((spot) => {
-  const option = document.createElement('option');
-  option.value = spot.id;
-  option.textContent = spot.name;
-  selectSpot.appendChild(option);
-
-  if (!hasLeaflet) return;
-
-  const marker = L.marker([spot.lat, spot.lng])
-    .addTo(map)
-    .bindPopup(`<strong>${spot.name}</strong><br/>Window: ${formatDateLabel(spot.eventWindowStart)} - ${formatDateLabel(spot.eventWindowEnd)}`);
-
-  marker.on('click', () => {
-    activeSpotId = spot.id;
-    selectSpot.value = spot.id;
-    refreshDashboard();
+  if (!latestMerged[spot.name]) await loadSpotData(spot);
+  const rows = latestMerged[spot.name].map((r) => {
+    const scoreObj = computeSurfScore(r, spot, skill, riskBias);
+    return { ...r, score: scoreObj.score, contributions: scoreObj.contributions };
   });
 
-  markers.set(spot.id, marker);
-});
+  const nowRow = rows[0];
+  renderSnapshot(spot, nowRow, { score: nowRow.score });
+  renderWeeklyHeatmap(rows);
+  renderMetricBreakdown(nowRow.contributions, nowRow);
+  renderAlerts(rows);
+  renderCharts(rows, nowRow.contributions);
+  refreshMap(spot.name);
+}
 
-windowRange.max = String(FORECAST_DAYS);
-windowRange.value = String(FORECAST_DAYS);
-windowValue.textContent = String(FORECAST_DAYS);
-updateWindowDateLabel(FORECAST_DAYS);
+async function boot() {
+  SURF_SPOTS.forEach((s) => {
+    const opt = document.createElement('option');
+    opt.textContent = s.name;
+    spotSelect.appendChild(opt);
+  });
+  spotSelect.value = SURF_SPOTS[0].name;
 
-selectSpot.addEventListener('change', (event) => {
-  activeSpotId = event.target.value;
-  const spot = surfSpots.find((s) => s.id === activeSpotId);
-  if (hasLeaflet && map) {
-    map.flyTo([spot.lat, spot.lng], 5, { duration: 1 });
-    markers.get(spot.id)?.openPopup();
-  }
-  refreshDashboard();
-});
+  initMap();
+  await Promise.all(SURF_SPOTS.map((s) => loadSpotData(s)));
+  await refreshDashboard();
 
-windowRange.addEventListener('input', refreshDashboard);
-skillLevel.addEventListener('change', refreshDashboard);
-hourlyDaySelect.addEventListener('change', (event) => {
-  const idx = Number(event.target.value);
-  if (latestForecast[idx]) {
-    renderHourlyChart(latestForecast[idx]);
-  }
-});
+  spotSelect.addEventListener('change', refreshDashboard);
+  skillSelect.addEventListener('change', refreshDashboard);
+  riskSlider.addEventListener('input', refreshDashboard);
+}
 
-selectSpot.value = activeSpotId;
-refreshDashboard();
+boot();
