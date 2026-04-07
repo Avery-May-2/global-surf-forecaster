@@ -112,6 +112,7 @@ const surfSpots = [
 ];
 
 const FORECAST_DAYS = 6;
+const RANKINGS_REFRESH_MS = 15 * 60 * 1000;
 const hasLeaflet = typeof window.L !== 'undefined';
 const hasChartJs = typeof window.Chart !== 'undefined';
 let map = null;
@@ -367,28 +368,148 @@ function renderHourlyDayPicker(forecast) {
   renderHourlyChart(forecast[selected]);
 }
 
-function parseRankingsFromText(text) {
+const countryCodeByName = {
+  australia: 'AU',
+  brazil: 'BR',
+  france: 'FR',
+  japan: 'JP',
+  indonesia: 'ID',
+  portugal: 'PT',
+  usa: 'US',
+  'united states': 'US',
+  hawaii: 'US',
+  tahiti: 'PF',
+  'french polynesia': 'PF',
+  peru: 'PE',
+  spain: 'ES',
+  italy: 'IT',
+  morocco: 'MA',
+  germany: 'DE',
+  argentina: 'AR',
+  chile: 'CL',
+  ecuador: 'EC',
+  newzealand: 'NZ',
+  'new zealand': 'NZ',
+  'south africa': 'ZA',
+  'costa rica': 'CR',
+  canada: 'CA',
+  ireland: 'IE',
+  england: 'GB'
+};
+
+function countryToIso2(country = '') {
+  const normalized = country.toLowerCase().replace(/\s+/g, ' ').trim();
+  return countryCodeByName[normalized] || countryCodeByName[normalized.replace(/\s/g, '')] || '';
+}
+
+function iso2ToFlag(iso2 = '') {
+  if (!/^[A-Z]{2}$/.test(iso2)) return '🏳️';
+  return String.fromCodePoint(...[...iso2].map((c) => 127397 + c.charCodeAt(0)));
+}
+
+function movementMeta(raw) {
+  const clean = String(raw ?? '-').trim();
+  if (clean === '-' || clean === '0' || clean === '–') return { cls: 'flat', icon: '•', label: 'No change' };
+  const n = Number(clean.replace(/[+−-]/g, ''));
+  if (clean.startsWith('-') || clean.startsWith('−')) return { cls: 'down', icon: '▼', label: `Down ${n || 1}` };
+  if (clean.startsWith('+')) return { cls: 'up', icon: '▲', label: `Up ${n || 1}` };
+  return { cls: 'up', icon: '▲', label: `Up ${n || 1}` };
+}
+
+function parseCountryFromName(nameAndCountry = '') {
+  const trimmed = nameAndCountry.trim();
+  const match = trimmed.match(/^(.+?)([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)$/);
+  if (!match) return { surfer: trimmed, country: '' };
+  return { surfer: match[1].trim(), country: match[2].trim() };
+}
+
+function parseRankingsFromMarkdown(text) {
   const rows = [];
-  const regex = /"rank"\s*:\s*(\d+).*?"fullName"\s*:\s*"([^"]+)".*?"points"\s*:\s*([\d.]+)/g;
-  let match;
-  while ((match = regex.exec(text)) && rows.length < 20) {
-    rows.push({ rank: match[1], surfer: match[2], points: String(Math.round(Number(match[3]))) });
+  const lines = text.split('\n').filter((line) => line.includes('|'));
+
+  for (const line of lines) {
+    if (!/^\d+\s*\|/.test(line.trim())) continue;
+    const cols = line.split('|').map((c) => c.trim()).filter(Boolean);
+    if (cols.length < 5) continue;
+
+    const rank = cols[0];
+    const movement = cols[1] || '-';
+    const nameAndCountry = cols[3] || '';
+    const points = cols[cols.length - 1].replace(/,/g, '');
+    const { surfer, country } = parseCountryFromName(nameAndCountry);
+
+    rows.push({
+      rank,
+      movement,
+      surfer,
+      country,
+      countryCode: countryToIso2(country),
+      points: String(Number(points) || 0),
+      photo: ''
+    });
+
+    if (rows.length >= 20) break;
   }
+
   return rows;
 }
 
+function parseRankingsFromJsonText(text) {
+  const byAthlete = new Map();
+  const entryRegex = /\{[^{}]*"rank"\s*:\s*(\d+)[^{}]*"fullName"\s*:\s*"([^"]+)"[^{}]*"points"\s*:\s*([\d.]+)[^{}]*\}/g;
+  let match;
+
+  while ((match = entryRegex.exec(text)) && byAthlete.size < 40) {
+    const block = match[0];
+    const country = (block.match(/"country"\s*:\s*"([^"]+)"/) || [])[1] || '';
+    const countryCode = (block.match(/"countryCode"\s*:\s*"([A-Z]{2})"/) || [])[1] || countryToIso2(country);
+    const movement = (block.match(/"(?:rankChange|liveMovement|movement|change)"\s*:\s*"?([+−\-\d]+)"?/) || [])[1] || '-';
+    const photo = (block.match(/"(?:imageUrl|headshot|photoUrl|avatarUrl)"\s*:\s*"([^"]+)"/) || [])[1] || '';
+
+    byAthlete.set(match[2], {
+      rank: match[1],
+      surfer: match[2],
+      points: String(Math.round(Number(match[3]))),
+      movement,
+      country,
+      countryCode,
+      photo
+    });
+  }
+
+  return Array.from(byAthlete.values()).sort((a, b) => Number(a.rank) - Number(b.rank)).slice(0, 20);
+}
+
+function fallbackPhoto(name = '') {
+  const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || 'WSL';
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=0f172a&color=e2e8f0&size=64`;
+}
+
 async function fetchWslRankings(tour) {
-  const primaryUrl = `https://r.jina.ai/http://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`;
-  const response = await fetch(primaryUrl);
-  if (!response.ok) {
-    throw new Error(`Rankings source returned ${response.status}`);
+  const pageUrl = `https://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`;
+  const sources = [
+    `https://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
+    `https://r.jina.ai/http://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`
+  ];
+
+  let lastError = new Error('Unknown rankings fetch failure');
+
+  for (const url of sources) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const text = await response.text();
+      const parsedJson = parseRankingsFromJsonText(text);
+      const parsed = parsedJson.length ? parsedJson : parseRankingsFromMarkdown(text);
+      if (!parsed.length) continue;
+      return parsed.map((row) => ({ ...row, photo: row.photo || fallbackPhoto(row.surfer) }));
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const text = await response.text();
-  const parsed = parseRankingsFromText(text);
-  if (!parsed.length) {
-    throw new Error('No ranking rows detected');
-  }
-  return parsed;
+
+  throw lastError;
 }
 
 function renderRankingTable(el, rows) {
@@ -398,10 +519,29 @@ function renderRankingTable(el, rows) {
   }
 
   const html = `
-    <table>
-      <thead><tr><th>Rank</th><th>Surfer</th><th>Points</th></tr></thead>
+    <table class="ranking-table">
+      <thead><tr><th>Rank</th><th>Surfer</th><th>Live</th><th>Points</th></tr></thead>
       <tbody>
-        ${rows.map((row) => `<tr><td>${row.rank}</td><td>${row.surfer}</td><td>${row.points}</td></tr>`).join('')}
+        ${rows.map((row) => {
+          const movement = movementMeta(row.movement);
+          const iso2 = row.countryCode || countryToIso2(row.country);
+          const flag = iso2ToFlag((iso2 || '').toUpperCase());
+          const countryLabel = row.country || iso2 || 'Unknown country';
+          return `<tr>
+            <td>${row.rank}</td>
+            <td>
+              <div class="surfer-cell">
+                <img class="surfer-photo" src="${row.photo}" alt="${row.surfer} profile photo" loading="lazy" referrerpolicy="no-referrer" />
+                <div>
+                  <strong>${row.surfer}</strong>
+                  <span class="surfer-country" title="${countryLabel}">${flag} ${countryLabel}</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="movement ${movement.cls}" title="${movement.label}">${movement.icon} ${row.movement}</span></td>
+            <td>${row.points}</td>
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>
   `;
@@ -413,7 +553,7 @@ async function loadRankings() {
   wctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
 
   const fallbackRows = [
-    { rank: '-', surfer: 'Rankings temporarily unavailable', points: '-' }
+    { rank: '-', movement: '-', surfer: 'Rankings temporarily unavailable', country: '', countryCode: '', points: '-', photo: fallbackPhoto('WSL') }
   ];
 
   try {
@@ -500,3 +640,4 @@ hourlyDaySelect.addEventListener('change', (event) => {
 selectSpot.value = activeSpotId;
 refreshDashboard();
 loadRankings();
+setInterval(loadRankings, RANKINGS_REFRESH_MS);
