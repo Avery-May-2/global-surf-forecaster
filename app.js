@@ -16,8 +16,6 @@ const SURF_SPOTS = [
 ];
 
 const CACHE_MINUTES = 60;
-const hasLeaflet = typeof window.L !== 'undefined';
-const hasChart = typeof window.Chart !== 'undefined';
 const spotSelect = document.getElementById('spotSelect');
 const skillSelect = document.getElementById('skillSelect');
 const snapshotPanel = document.getElementById('snapshotPanel');
@@ -82,20 +80,13 @@ function computeSurfScore(row, spot, skill) {
 
 async function fetchCached(key, loader) {
   const cacheKey = `surf-cache-${key}`;
-  try {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Date.now() - parsed.ts < CACHE_MINUTES * 60000) return parsed.data;
-    }
-  } catch {}
-
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    const parsed = JSON.parse(cached);
+    if (Date.now() - parsed.ts < CACHE_MINUTES * 60000) return parsed.data;
+  }
   const data = await loader();
-
-  try {
-    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
-  } catch {}
-
+  localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
   return data;
 }
 
@@ -103,12 +94,11 @@ async function fetchForecast(spot) {
   return fetchCached(`forecast-${spot.lat}-${spot.lng}`, async () => {
     const start = new Date().toISOString().slice(0, 10);
     const end = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
-    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lng}&hourly=wave_height,wave_period&timezone=UTC&start_date=${start}&end_date=${end}`;
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lng}&hourly=wave_height,wave_period&wind_speed_unit=ms&timezone=UTC&start_date=${start}&end_date=${end}`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Forecast request failed for ${spot.name}`);
     const data = await response.json();
-    if (!data?.hourly?.time?.length) throw new Error('No hourly forecast data returned');
 
+    if (!data?.hourly?.time?.length) throw new Error('No hourly forecast data returned');
     return data.hourly.time.map((t, i) => ({
       datetime: new Date(t + 'Z').toISOString(),
       waveHeight: data.hourly.wave_height[i] ?? 0.8,
@@ -126,14 +116,17 @@ function buildDailySeries(rows, skill, spot) {
     if (!buckets[day]) buckets[day] = [];
     buckets[day].push({ ...r, score: computeSurfScore(r, spot, skill) });
   });
+}
 
   return Object.entries(buckets).slice(0, 8).map(([day, dayRows]) => {
     const heightsFt = dayRows.map((d) => metersToFeet(d.waveHeight));
+    const avgScore = dayRows.reduce((s, d) => s + d.score, 0) / dayRows.length;
     return {
       day,
-      dayLabel: new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'short' }),
+      dayLabel: new Date(day + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' }),
       minFt: Math.min(...heightsFt),
       maxFt: Math.max(...heightsFt),
+      avgScore: Number(avgScore.toFixed(1)),
       sampleScores: dayRows.filter((_, idx) => idx % Math.ceil(dayRows.length / 3) === 0).slice(0, 3).map((d) => d.score)
     };
   });
@@ -153,19 +146,8 @@ function renderSnapshot(spot, nowRow, score) {
 }
 
 function renderTimeline(rows) {
-  if (!hasChart) {
-    const chartEl = document.getElementById('hourlyChart');
-    if (chartEl?.tagName === 'CANVAS') {
-      const msg = document.createElement('p');
-      msg.className = 'chart-fallback';
-      msg.textContent = 'Chart library unavailable. Timeline data is loaded but cannot be plotted.';
-      chartEl.replaceWith(msg);
-    }
-    return;
-  }
-
   const next24 = rows.slice(0, 24);
-  const labels = next24.map((r) => `${new Date(r.datetime).getUTCHours().toString().padStart(2, '0')}:00`);
+  const labels = next24.map((r) => new Date(r.datetime).getUTCHours().toString().padStart(2, '0') + ':00');
   const heightsFt = next24.map((r) => Number(metersToFeet(r.waveHeight).toFixed(2)));
   const scores = next24.map((r) => r.score);
 
@@ -187,7 +169,6 @@ function renderTimeline(rows) {
       }
     }
   });
-}
 
 function renderAlerts(rows) {
   const alerts = [];
@@ -211,8 +192,8 @@ function renderEightDayOverview() {
   SURF_SPOTS.forEach((spot) => {
     const rows = spotSeries[spot.name] || [];
     if (!rows.length) return;
-
     const daily = buildDailySeries(rows, skillSelect.value, spot);
+
     const row = document.createElement('div');
     row.className = 'forecast-row';
 
@@ -245,28 +226,25 @@ function renderEightDayOverview() {
 }
 
 function initMap() {
-  const mapEl = document.getElementById('surfMap');
-  if (!hasLeaflet) {
-    mapEl.innerHTML = '<p class="chart-fallback">Map library unavailable. Use the spot selector to load timelines.</p>';
-    return;
-  }
-
   map = L.map('surfMap').setView([15, -25], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 }
 
 function renderMap() {
-  if (!map) return;
-
   markers.forEach((m) => m.remove());
   markers = [];
 
   SURF_SPOTS.forEach((spot) => {
     const score = spotSeries[spot.name]?.[0]?.score ?? 5;
     const band = scoreBand(score);
-    const marker = L.circleMarker([spot.lat, spot.lng], { radius: 8, color: band.color, fillOpacity: 0.9, weight: 2 }).addTo(map);
-    marker.bindPopup(`<strong>${spot.name}</strong><br/>${spot.breakType}<br/>Score ${score}/10`);
+    const marker = L.circleMarker([spot.lat, spot.lng], {
+      radius: 8,
+      color: band.color,
+      fillOpacity: 0.9,
+      weight: 2
+    }).addTo(map);
 
+    marker.bindPopup(`<strong>${spot.name}</strong><br/>${spot.breakType}<br/>Score ${score}/10`);
     marker.on('click', () => {
       selectedSpotName = spot.name;
       spotSelect.value = spot.name;
@@ -304,24 +282,13 @@ async function loadAllSpots() {
         }));
       }
 
-      spotSeries[spot.name] = rows.map((r) => ({ ...r, score: computeSurfScore(r, spot, skillSelect.value) }));
+      const scored = rows.map((r) => ({ ...r, score: computeSurfScore(r, spot, skillSelect.value) }));
+      spotSeries[spot.name] = scored;
     })
   );
 }
 
-function setLoadingState() {
-  snapshotPanel.innerHTML = '<div class="metric-card"><div class="k">Loading</div><div class="v">Fetching global spot forecasts…</div></div>';
-  eightDayGrid.innerHTML = '<div class="metric-card"><div class="k">Loading</div><div class="v">Building 8-day outlook…</div></div>';
-  alertsList.innerHTML = '<div class="alert-item">Loading alert engine…</div>';
-}
-
-function setErrorState(message) {
-  snapshotPanel.innerHTML = `<div class="metric-card score-poor"><div class="k">Data Error</div><div class="v">${message}</div></div>`;
-  eightDayGrid.innerHTML = '<div class="metric-card"><div class="k">Forecast</div><div class="v">Unable to render due to loading error.</div></div>';
-  alertsList.innerHTML = '<div class="alert-item">Unable to compute alerts right now.</div>';
-}
-
-function refreshForSkillChange() {
+async function refreshForSkillChange() {
   SURF_SPOTS.forEach((spot) => {
     const rows = spotSeries[spot.name] || [];
     spotSeries[spot.name] = rows.map((r) => ({ ...r, score: computeSurfScore(r, spot, skillSelect.value) }));
@@ -332,24 +299,16 @@ function refreshForSkillChange() {
 }
 
 async function boot() {
-  setLoadingState();
-
   SURF_SPOTS.forEach((spot) => {
     const option = document.createElement('option');
     option.value = spot.name;
     option.textContent = spot.name;
     spotSelect.appendChild(option);
   });
+  spotSelect.value = SURF_SPOTS[0].name;
 
   initMap();
-
-  try {
-    await loadAllSpots();
-  } catch {
-    setErrorState('Forecast feeds unavailable.');
-    return;
-  }
-
+  await loadAllSpots();
   renderMap();
   renderEightDayOverview();
   updateSelectedSpot();
