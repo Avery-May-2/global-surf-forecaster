@@ -21,6 +21,17 @@ const skillSelect = document.getElementById('skillSelect');
 const snapshotPanel = document.getElementById('snapshotPanel');
 const alertsList = document.getElementById('alertsList');
 const eightDayGrid = document.getElementById('eightDayGrid');
+const mapContainer = document.getElementById('surfMap');
+
+function notify(message) {
+  const existing = document.getElementById('runtimeNotice');
+  if (existing) existing.remove();
+  const note = document.createElement('div');
+  note.id = 'runtimeNotice';
+  note.className = 'chart-fallback';
+  note.textContent = message;
+  document.body.prepend(note);
+}
 
 let map;
 let markers = [];
@@ -100,7 +111,7 @@ async function fetchForecast(spot) {
 
     if (!data?.hourly?.time?.length) throw new Error('No hourly forecast data returned');
     return data.hourly.time.map((t, i) => ({
-      datetime: new Date(t + 'Z').toISOString(),
+      datetime: new Date(`${t}Z`).toISOString(),
       waveHeight: data.hourly.wave_height[i] ?? 0.8,
       wavePeriod: data.hourly.wave_period[i] ?? 8,
       windSpeed: 5 + (i % 7),
@@ -116,18 +127,19 @@ function buildDailySeries(rows, skill, spot) {
     if (!buckets[day]) buckets[day] = [];
     buckets[day].push({ ...r, score: computeSurfScore(r, spot, skill) });
   });
-}
 
   return Object.entries(buckets).slice(0, 8).map(([day, dayRows]) => {
     const heightsFt = dayRows.map((d) => metersToFeet(d.waveHeight));
-    const avgScore = dayRows.reduce((s, d) => s + d.score, 0) / dayRows.length;
+    const avgScore = dayRows.reduce((sum, d) => sum + d.score, 0) / dayRows.length;
+    const divisor = Math.max(1, Math.ceil(dayRows.length / 3));
+
     return {
       day,
-      dayLabel: new Date(day + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' }),
+      dayLabel: new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'short' }),
       minFt: Math.min(...heightsFt),
       maxFt: Math.max(...heightsFt),
       avgScore: Number(avgScore.toFixed(1)),
-      sampleScores: dayRows.filter((_, idx) => idx % Math.ceil(dayRows.length / 3) === 0).slice(0, 3).map((d) => d.score)
+      sampleScores: dayRows.filter((_, idx) => idx % divisor === 0).slice(0, 3).map((d) => d.score)
     };
   });
 }
@@ -147,17 +159,34 @@ function renderSnapshot(spot, nowRow, score) {
 
 function renderTimeline(rows) {
   const next24 = rows.slice(0, 24);
-  const labels = next24.map((r) => new Date(r.datetime).getUTCHours().toString().padStart(2, '0') + ':00');
+  const labels = next24.map((r) => `${new Date(r.datetime).getUTCHours().toString().padStart(2, '0')}:00`);
   const heightsFt = next24.map((r) => Number(metersToFeet(r.waveHeight).toFixed(2)));
   const scores = next24.map((r) => r.score);
+  const chartEl = document.getElementById('hourlyChart');
+
+  if (typeof Chart === 'undefined') {
+    document.getElementById('timelineFallback')?.remove();
+    const fallback = document.createElement('div');
+    fallback.id = 'timelineFallback';
+    fallback.className = 'chart-fallback';
+    fallback.innerHTML = '<strong>Timeline fallback:</strong> chart library unavailable, showing text values.';
+    next24.slice(0, 8).forEach((r, idx) => {
+      const row = document.createElement('div');
+      row.textContent = `${labels[idx]} · ${Number(metersToFeet(r.waveHeight)).toFixed(1)}ft · score ${r.score}`;
+      fallback.appendChild(row);
+    });
+    chartEl.style.display = 'none';
+    document.querySelector('.timeline')?.appendChild(fallback);
+    return;
+  }
 
   hourlyChart?.destroy();
-  hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+  hourlyChart = new Chart(chartEl, {
     data: {
       labels,
       datasets: [
         { type: 'line', label: 'Wave Height (ft)', data: heightsFt, borderColor: '#5aa3d8', backgroundColor: '#5aa3d820', yAxisID: 'y' },
-        { type: 'bar', label: 'Surf Score', data: scores, backgroundColor: scores.map((s) => scoreBand(s).color + 'cc'), yAxisID: 'y1' }
+        { type: 'bar', label: 'Surf Score', data: scores, backgroundColor: scores.map((s) => `${scoreBand(s).color}cc`), yAxisID: 'y1' }
       ]
     },
     options: {
@@ -169,6 +198,7 @@ function renderTimeline(rows) {
       }
     }
   });
+}
 
 function renderAlerts(rows) {
   const alerts = [];
@@ -192,8 +222,8 @@ function renderEightDayOverview() {
   SURF_SPOTS.forEach((spot) => {
     const rows = spotSeries[spot.name] || [];
     if (!rows.length) return;
-    const daily = buildDailySeries(rows, skillSelect.value, spot);
 
+    const daily = buildDailySeries(rows, skillSelect.value, spot);
     const row = document.createElement('div');
     row.className = 'forecast-row';
 
@@ -226,17 +256,24 @@ function renderEightDayOverview() {
 }
 
 function initMap() {
+  if (typeof L === 'undefined') {
+    mapContainer.innerHTML = '<div class="chart-fallback">Map tiles unavailable. Use spot selector above to explore forecasts.</div>';
+    return;
+  }
   map = L.map('surfMap').setView([15, -25], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 }
 
 function renderMap() {
-  markers.forEach((m) => m.remove());
+  if (typeof L === 'undefined' || !map) return;
+
+  markers.forEach((marker) => marker.remove());
   markers = [];
 
   SURF_SPOTS.forEach((spot) => {
     const score = spotSeries[spot.name]?.[0]?.score ?? 5;
     const band = scoreBand(score);
+
     const marker = L.circleMarker([spot.lat, spot.lng], {
       radius: 8,
       color: band.color,
@@ -288,11 +325,12 @@ async function loadAllSpots() {
   );
 }
 
-async function refreshForSkillChange() {
+function refreshForSkillChange() {
   SURF_SPOTS.forEach((spot) => {
     const rows = spotSeries[spot.name] || [];
     spotSeries[spot.name] = rows.map((r) => ({ ...r, score: computeSurfScore(r, spot, skillSelect.value) }));
   });
+
   renderMap();
   renderEightDayOverview();
   updateSelectedSpot();
@@ -305,9 +343,13 @@ async function boot() {
     option.textContent = spot.name;
     spotSelect.appendChild(option);
   });
+
   spotSelect.value = SURF_SPOTS[0].name;
 
   initMap();
+  if (typeof L === 'undefined' || typeof Chart === 'undefined') {
+    notify('Some third-party libraries did not load; fallback views are active.');
+  }
   await loadAllSpots();
   renderMap();
   renderEightDayOverview();
