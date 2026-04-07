@@ -36,8 +36,7 @@ body {
     'map controls'
     'chart controls'
     'hourly controls'
-    'byday controls'
-    'rankings controls';
+    'byday controls';
 }
 
 .panel {
@@ -90,7 +89,6 @@ body {
 }
 
 .hourly-head h2,
-.rankings-panel h2,
 .chart-panel h2,
 .by-day-panel h2,
 .controls-panel h2 {
@@ -198,16 +196,12 @@ body {
 @media (max-width: 950px) {
   .layout {
     grid-template-columns: 1fr;
-    grid-template-areas: 'controls' 'map' 'chart' 'hourly' 'byday' 'rankings';
+    grid-template-areas: 'controls' 'map' 'chart' 'hourly' 'byday';
   }
 
   .map-panel,
   #map {
     min-height: 320px;
-  }
-
-  .rankings-grid {
-    grid-template-columns: 1fr;
   }
 
   .hourly-head {

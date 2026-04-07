@@ -549,5 +549,3 @@ hourlyDaySelect.addEventListener('change', (event) => {
 
 selectSpot.value = activeSpotId;
 refreshDashboard();
-loadRankings();
-setInterval(loadRankings, RANKINGS_REFRESH_MS);
