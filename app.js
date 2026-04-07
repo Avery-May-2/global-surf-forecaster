@@ -216,19 +216,26 @@ async function fetchMarineForecast(spot, days, skill) {
     end_date: endDate
   });
 
-  const response = responses[0];
-  const hourly = response.hourly();
-  if (!hourly) return [];
-
-  const utcOffsetSeconds = response.utcOffsetSeconds();
-  const count = (Number(hourly.timeEnd()) - Number(hourly.time())) / hourly.interval();
-  const times = Array.from({ length: count }, (_, i) => {
-    const epochSeconds = Number(hourly.time()) + i * hourly.interval() + utcOffsetSeconds;
-    return new Date(epochSeconds * 1000).toISOString().slice(0, 16);
+  const params = new URLSearchParams({
+    latitude: String(spot.lat),
+    longitude: String(spot.lng),
+    hourly: 'wave_height,wave_period',
+    timezone: 'UTC',
+    start_date: startDate,
+    end_date: endDate
   });
+
+  const response = await fetch(`https://marine-api.open-meteo.com/v1/marine?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`Marine API returned ${response.status}`);
+  }
 
   const waveHeights = Array.from(hourly.variables(0)?.valuesArray() ?? []).map((h) => (h ?? 0.5) * skillAdjustments[skill]);
   const wavePeriods = Array.from(hourly.variables(1)?.valuesArray() ?? []).map((p) => p ?? 8);
+
+  if (!times.length || !waveHeights.length || !wavePeriods.length) {
+    throw new Error('Marine API returned no hourly wave data');
+  }
 
   return groupByDay(times, waveHeights, wavePeriods).slice(0, days);
 }
