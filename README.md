@@ -1,26 +1,26 @@
-# Global Surf Forecaster (Web App)
+# Surfability Intelligence Dashboard
 
-A browser-based dashboard for exploring wave forecasts at world-tour-level surf spots around the globe.
+Global surf dashboard that answers **"is it surfable right now?"** across popular surf breaks worldwide.
 
-## Features
+## Current feature set
 
-- Interactive map with 2026 Championship Tour surf spots.
-- Forecast controls for surf spot, forecast window, and rider skill level.
-- Daily wave-height forecast chart for the selected spot.
-- **Time-of-day wave chart** for hourly wave height on a selected day.
-- By-day cards with wave snapshots throughout each day.
-- Summary card with event window, wave height stats, swell period, wind, and skill suitability.
+- Global map with popular surf locations across North America, Europe, Africa, Oceania, and Asia.
+- Click any map marker to instantly load that location's 24-hour surf timeline.
+- Snapshot panel for selected location (score, wave height, period, wind, break type).
+- Alerts panel for optimal windows, wind shifts, and swell arrivals.
+- **8-day forecast overview** styled as multi-row spot strips with day-by-day wave ranges and quality indicators.
+
+## Data + architecture
+
+- Forecast ingestion uses Open-Meteo Marine hourly feed (public, no key).
+- Uniform row schema for all spots (`datetime`, `waveHeight`, `wavePeriod`, synthetic wind fields, `score`).
+- Client cache via `localStorage` with 60-minute TTL to minimize repeated API calls.
+- Internal surf scoring remains on a 1–10 scale and maps to Good/Fair/Poor UI states.
 
 ## Run locally
-
-Because this app loads live APIs, use a simple local web server:
 
 ```bash
 python -m http.server 8000
 ```
 
-Then open `http://localhost:8000`.
-
-## Notes
-
-- Wave forecast data is sourced live from Open-Meteo Marine API.
+Open `http://localhost:8000`.
