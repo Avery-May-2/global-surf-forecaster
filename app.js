@@ -427,15 +427,22 @@ function parseRankingsFromMarkdown(text) {
   const rows = [];
   const lines = text.split('\n').filter((line) => line.includes('|'));
 
+  function toNumericString(value = '') {
+    const cleaned = String(value).replace(/,/g, '').replace(/[^\d.-]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? String(Math.round(n)) : '0';
+  }
+
   for (const line of lines) {
     if (!/^\d+\s*\|/.test(line.trim())) continue;
     const cols = line.split('|').map((c) => c.trim()).filter(Boolean);
-    if (cols.length < 5) continue;
+    if (cols.length < 4) continue;
 
     const rank = cols[0];
     const movement = cols[1] || '-';
-    const nameAndCountry = cols[3] || '';
-    const points = cols[cols.length - 1].replace(/,/g, '');
+    const points = toNumericString(cols[cols.length - 1]);
+    const nameCols = cols.slice(2, -1);
+    const nameAndCountry = nameCols.join(' ').replace(/\s+/g, ' ').trim();
     const { surfer, country } = parseCountryFromName(nameAndCountry);
 
     rows.push({
@@ -444,7 +451,7 @@ function parseRankingsFromMarkdown(text) {
       surfer,
       country,
       countryCode: countryToIso2(country),
-      points: String(Number(points) || 0),
+      points,
       photo: ''
     });
 
@@ -457,13 +464,23 @@ function parseRankingsFromMarkdown(text) {
 function parseRankingsFromJsonText(text) {
   const byAthlete = new Map();
 
+  function toNumber(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string') return Number.NaN;
+    const normalized = value.replace(/,/g, '').replace(/[^\d.+-]/g, '');
+    return Number(normalized);
+  }
+
   function tryAddRankRow(candidate = {}) {
-    const rankValue = Number(candidate.rank ?? candidate.liveRank ?? candidate.position ?? NaN);
-    const pointsValue = Number(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? NaN);
+    const rankValue = toNumber(candidate.rank ?? candidate.liveRank ?? candidate.position ?? candidate.currentRank ?? NaN);
+    const pointsValue = toNumber(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? candidate.currentPoints ?? NaN);
     const surfer = String(
       candidate.fullName
       || candidate.name
+      || candidate.displayName
+      || candidate.surferName
       || [candidate.firstName, candidate.lastName].filter(Boolean).join(' ')
+      || [candidate.givenName, candidate.familyName].filter(Boolean).join(' ')
       || ''
     ).trim();
 
@@ -526,12 +543,17 @@ function fallbackPhoto(name = '') {
 }
 
 async function fetchWslRankings(tour) {
-  const pageUrl = `https://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`;
-  const sources = [
-    `https://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
-    `https://r.jina.ai/http://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`
-  ];
+  const currentYear = new Date().getUTCFullYear();
+  const years = [currentYear, currentYear - 1];
+  const sources = years.flatMap((year) => {
+    const pageUrl = `https://www.worldsurfleague.com/athletes/tour/${tour}?year=${year}`;
+    return [
+      pageUrl,
+      `https://origin.worldsurfleague.com/athletes/tour/${tour}?year=${year}`,
+      `https://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`
+    ];
+  });
 
   let lastError = new Error('Unknown rankings fetch failure');
 
