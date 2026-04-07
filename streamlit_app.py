@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import re
 from dataclasses import dataclass
-from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -41,46 +39,10 @@ SURF_SPOTS = [
 SKILL_ADJUSTMENTS = {'Beginner': 0.7, 'Intermediate': 1.0, 'Advanced': 1.25}
 
 
-class RankingRowParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.in_row = False
-        self.in_cell = False
-        self.current_row: list[str] = []
-        self.rows: list[list[str]] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == 'tr':
-            self.in_row = True
-            self.current_row = []
-        elif self.in_row and tag in {'td', 'th'}:
-            self.in_cell = True
-            self.current_row.append('')
-
-    def handle_data(self, data: str) -> None:
-        if self.in_row and self.in_cell and self.current_row:
-            self.current_row[-1] += data.strip()
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in {'td', 'th'}:
-            self.in_cell = False
-        elif tag == 'tr' and self.in_row:
-            self.in_row = False
-            normalized = [re.sub(r'\s+', ' ', cell).strip() for cell in self.current_row if cell.strip()]
-            if len(normalized) >= 3 and normalized[0].isdigit():
-                self.rows.append(normalized)
-
-
 def json_get(url: str) -> dict[str, Any]:
     req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urlopen(req, timeout=25) as response:
         return json.loads(response.read().decode('utf-8'))
-
-
-def text_get(url: str) -> str:
-    req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urlopen(req, timeout=25) as response:
-        return response.read().decode('utf-8', 'ignore')
 
 
 @st.cache_data(ttl=30 * 60)
@@ -137,36 +99,6 @@ def spot_suitability(avg_height: float, skill: str) -> str:
     return 'Excellent heavy-water session' if avg_height >= 2.5 else 'Playful but smaller day'
 
 
-@st.cache_data(ttl=30 * 60)
-def fetch_wsl_rankings(tour: str, year: int = 2026) -> list[dict[str, str]]:
-    tour_url = f'https://www.worldsurfleague.com/athletes/tour/{tour}?year={year}'
-    html = text_get(tour_url)
-
-    script_match = re.search(r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, flags=re.DOTALL)
-    if script_match:
-        try:
-            next_data = json.loads(script_match.group(1))
-            payload = json.dumps(next_data)
-            rows = re.findall(r'"rank"\s*:\s*(\d+).*?"fullName"\s*:\s*"([^"]+)".*?"points"\s*:\s*([\d.]+)', payload)
-            if rows:
-                return [{'Rank': r, 'Surfer': name, 'Points': str(int(float(points)))} for r, name, points in rows[:20]]
-        except json.JSONDecodeError:
-            pass
-
-    parser = RankingRowParser()
-    parser.feed(html)
-    parsed_rows = parser.rows[:20]
-    if parsed_rows:
-        table_rows = []
-        for row in parsed_rows:
-            # Common WSL row ordering: rank, athlete, nationality, events, points
-            points = row[-1] if row[-1].replace('.', '', 1).isdigit() else row[min(4, len(row) - 1)]
-            table_rows.append({'Rank': row[0], 'Surfer': row[1], 'Points': points})
-        return table_rows
-
-    return []
-
-
 def hourly_chart_data(day: dict[str, Any]) -> dict[str, Any]:
     rows = []
     for row in day['sessions']:
@@ -201,14 +133,6 @@ def daily_chart_data(forecast: list[dict[str, Any]], spot_name: str) -> dict[str
         },
         'data': {'values': rows},
     }
-
-
-def render_rankings(title: str, rows: list[dict[str, str]]) -> None:
-    st.subheader(title)
-    if not rows:
-        st.warning('Unable to load live rankings right now from World Surf League.')
-        return
-    st.dataframe(rows, use_container_width=True, hide_index=True, height=420)
 
 
 def main() -> None:

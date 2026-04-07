@@ -36,8 +36,7 @@ body {
     'map controls'
     'chart controls'
     'hourly controls'
-    'byday controls'
-    'rankings controls';
+    'byday controls';
 }
 
 .panel {
@@ -80,8 +79,6 @@ body {
 .chart-panel { grid-area: chart; }
 .hourly-panel { grid-area: hourly; }
 .by-day-panel { grid-area: byday; }
-.rankings-panel { grid-area: rankings; }
-
 .hourly-head {
   display: grid;
   grid-template-columns: 1fr auto minmax(170px, 260px);
@@ -91,7 +88,6 @@ body {
 }
 
 .hourly-head h2,
-.rankings-panel h2,
 .chart-panel h2,
 .by-day-panel h2,
 .controls-panel h2 {
@@ -139,101 +135,6 @@ body {
 .day-card li strong { color: var(--accent); }
 .day-card li em { color: var(--muted); font-style: normal; }
 
-.rankings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.rankings-grid h3 {
-  margin-top: 0;
-  margin-bottom: 0.4rem;
-}
-
-.table-wrap {
-  max-height: 390px;
-  overflow: auto;
-  border: 1px solid #334155;
-  border-radius: 10px;
-}
-
-.table-wrap table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-
-.table-wrap th,
-.table-wrap td {
-  text-align: left;
-  padding: 0.45rem 0.5rem;
-  border-bottom: 1px solid #1e293b;
-}
-
-.table-wrap th {
-  position: sticky;
-  top: 0;
-  background: #132036;
-  color: #dbeafe;
-}
-
-.table-wrap td:last-child,
-.table-wrap th:last-child {
-  text-align: right;
-}
-
-.surfer-cell {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  gap: 0.55rem;
-  align-items: center;
-}
-
-.surfer-photo {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid #334155;
-  background: #0b1220;
-}
-
-.surfer-cell strong {
-  display: block;
-  line-height: 1.2;
-}
-
-.surfer-country {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--muted);
-  margin-top: 0.1rem;
-}
-
-.movement {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.18rem;
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 0.1rem 0.38rem;
-}
-
-.movement.up {
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.12);
-}
-
-.movement.down {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.12);
-}
-
-.movement.flat {
-  color: #cbd5e1;
-  background: rgba(148, 163, 184, 0.14);
-}
-
 .muted {
   margin: 0;
   padding: 0.6rem;
@@ -243,16 +144,12 @@ body {
 @media (max-width: 950px) {
   .layout {
     grid-template-columns: 1fr;
-    grid-template-areas: 'controls' 'map' 'chart' 'hourly' 'byday' 'rankings';
+    grid-template-areas: 'controls' 'map' 'chart' 'hourly' 'byday';
   }
 
   .map-panel,
   #map {
     min-height: 320px;
-  }
-
-  .rankings-grid {
-    grid-template-columns: 1fr;
   }
 
   .hourly-head {
