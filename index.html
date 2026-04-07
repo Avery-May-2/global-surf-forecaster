@@ -17,7 +17,6 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <noscript><div style="padding:1rem;background:#fff3cd;color:#5c4500;border-bottom:1px solid #f0d98c;">JavaScript is required to render live forecasts.</div></noscript>
     <header class="topbar">
       <div>
         <h1>🌊 Surfability Intelligence Dashboard</h1>
@@ -36,7 +35,7 @@
     </header>
 
     <main class="dashboard-grid">
-      <section class="panel snapshot" id="snapshotPanel"><p class="chart-fallback">Initializing dashboard…</p></section>
+      <section class="panel snapshot" id="snapshotPanel"></section>
 
       <section class="panel timeline">
         <div class="panel-head"><h2>24-Hour Surf Timeline (selected map spot)</h2></div>
@@ -50,12 +49,12 @@
 
       <section class="panel alerts">
         <div class="panel-head"><h2>Alerts & Notifications</h2></div>
-        <div id="alertsList" class="alerts-list"><div class="alert-item">Initializing alert engine…</div></div>
+        <div id="alertsList" class="alerts-list"></div>
       </section>
 
       <section class="panel eight-day">
         <div class="panel-head"><h2>8-Day Forecast Overview</h2></div>
-        <div id="eightDayGrid" class="eight-day-grid"><p class="chart-fallback">Preparing 8-day overview…</p></div>
+        <div id="eightDayGrid" class="eight-day-grid"></div>
       </section>
     </main>
 
