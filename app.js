@@ -21,6 +21,17 @@ const skillSelect = document.getElementById('skillSelect');
 const snapshotPanel = document.getElementById('snapshotPanel');
 const alertsList = document.getElementById('alertsList');
 const eightDayGrid = document.getElementById('eightDayGrid');
+const mapContainer = document.getElementById('surfMap');
+
+function notify(message) {
+  const existing = document.getElementById('runtimeNotice');
+  if (existing) existing.remove();
+  const note = document.createElement('div');
+  note.id = 'runtimeNotice';
+  note.className = 'chart-fallback';
+  note.textContent = message;
+  document.body.prepend(note);
+}
 
 let map;
 let markers = [];
@@ -151,9 +162,26 @@ function renderTimeline(rows) {
   const labels = next24.map((r) => `${new Date(r.datetime).getUTCHours().toString().padStart(2, '0')}:00`);
   const heightsFt = next24.map((r) => Number(metersToFeet(r.waveHeight).toFixed(2)));
   const scores = next24.map((r) => r.score);
+  const chartEl = document.getElementById('hourlyChart');
+
+  if (typeof Chart === 'undefined') {
+    document.getElementById('timelineFallback')?.remove();
+    const fallback = document.createElement('div');
+    fallback.id = 'timelineFallback';
+    fallback.className = 'chart-fallback';
+    fallback.innerHTML = '<strong>Timeline fallback:</strong> chart library unavailable, showing text values.';
+    next24.slice(0, 8).forEach((r, idx) => {
+      const row = document.createElement('div');
+      row.textContent = `${labels[idx]} · ${Number(metersToFeet(r.waveHeight)).toFixed(1)}ft · score ${r.score}`;
+      fallback.appendChild(row);
+    });
+    chartEl.style.display = 'none';
+    document.querySelector('.timeline')?.appendChild(fallback);
+    return;
+  }
 
   hourlyChart?.destroy();
-  hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+  hourlyChart = new Chart(chartEl, {
     data: {
       labels,
       datasets: [
@@ -228,6 +256,10 @@ function renderEightDayOverview() {
 }
 
 function initMap() {
+  if (typeof L === 'undefined') {
+    mapContainer.innerHTML = '<div class="chart-fallback">Map tiles unavailable. Use spot selector above to explore forecasts.</div>';
+    return;
+  }
   map = L.map('surfMap').setView([15, -25], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 }
@@ -313,6 +345,9 @@ async function boot() {
   spotSelect.value = SURF_SPOTS[0].name;
 
   initMap();
+  if (typeof L === 'undefined' || typeof Chart === 'undefined') {
+    notify('Some third-party libraries did not load; fallback views are active.');
+  }
   await loadAllSpots();
   renderMap();
   renderEightDayOverview();
