@@ -1,26 +1,33 @@
-# Global Surf Forecaster (Web App)
+# Surfability Intelligence Dashboard
 
-A browser-based dashboard for exploring wave forecasts at world-tour-level surf spots around the globe.
+A fully redesigned surf forecasting dashboard focused on the core question: **"Is it surfable right now?"**
 
-## Features
+## What is new
 
-- Interactive map with 2026 Championship Tour surf spots.
-- Forecast controls for surf spot, forecast window, and rider skill level.
-- Daily wave-height forecast chart for the selected spot.
-- **Time-of-day wave chart** for hourly wave height on a selected day.
-- By-day cards with wave snapshots throughout each day.
-- Summary card with event window, wave height stats, swell period, wind, and skill suitability.
+- **Instant Snapshot header panel** with Surf Score (1–10), wave height, swell, wind vector, tide state, and spot metadata.
+- **24-hour interactive timeline** combining wave height + color-coded Surf Score bars.
+- **7-day trend heatmap** for quick planning.
+- **Interactive map** with per-spot color-coded score pins and break-type popups.
+- **Detailed metrics** with radar-chart contribution breakdown (wave, swell, wind, tide).
+- **Alert cards** for optimal windows, wind shifts, and swell arrivals.
+- **Personalization control** to shift scoring by risk tolerance and surfer skill level.
+
+## Data architecture implemented
+
+- NOAA CO-OPS tides via API.
+- NOAA NDBC buoy parser utility included.
+- Forecast ingestion via marine API fallback (Open-Meteo) with a uniform internal schema.
+- Client-side cache (`localStorage`) with **60-minute TTL** to limit repeated API calls.
 
 ## Run locally
-
-Because this app loads live APIs, use a simple local web server:
 
 ```bash
 python -m http.server 8000
 ```
 
-Then open `http://localhost:8000`.
+Then open: `http://localhost:8000`
 
 ## Notes
 
-- Wave forecast data is sourced live from Open-Meteo Marine API.
+- The app is intentionally modular to allow Stormglass/OpenWeatherMap/WaveWatch adapters later without frontend rewrites.
+- Scoring logic remains internal on a 1–10 scale and maps to Good/Fair/Poor visual states.
