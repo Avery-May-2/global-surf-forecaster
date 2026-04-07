@@ -133,15 +133,11 @@ const skillLevel = document.getElementById('skill-level');
 const summaryCard = document.getElementById('conditions-summary');
 const byDayContainer = document.getElementById('by-day-forecast');
 const hourlyDaySelect = document.getElementById('hourly-day-select');
-const mctRankings = document.getElementById('mct-rankings');
-const wctRankings = document.getElementById('wct-rankings');
-const rankingsUpdatedAt = document.getElementById('rankings-updated-at');
 
 let activeSpotId = surfSpots[0].id;
 let dailyChart;
 let hourlyChart;
 let latestForecast = [];
-const RANKINGS_REFRESH_MS = 15 * 60 * 1000;
 
 function formatDateLabel(dateStr) {
   const date = new Date(`${dateStr}T00:00:00Z`);
@@ -367,113 +363,6 @@ function renderHourlyDayPicker(forecast) {
   const selected = previous && Number(previous) < forecast.length ? Number(previous) : 0;
   hourlyDaySelect.value = String(selected);
   renderHourlyChart(forecast[selected]);
-}
-
-function formatTimestamp(date = new Date()) {
-  return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function parseRankingsFromWslNextData(text) {
-  const scriptMatch = text.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
-  if (!scriptMatch) return [];
-
-  const seen = new Set();
-  const rows = [];
-
-  function walk(value) {
-    if (!value || rows.length >= 20) return;
-    if (Array.isArray(value)) {
-      value.forEach(walk);
-      return;
-    }
-    if (typeof value !== 'object') return;
-
-    const rank = Number(value.rank ?? value.liveRank ?? value.position);
-    const points = Number(String(value.points ?? value.totalPoints ?? value.livePoints ?? '').replace(/,/g, ''));
-    const name = String(value.fullName ?? value.name ?? [value.firstName, value.lastName].filter(Boolean).join(' ')).trim();
-
-    if (Number.isFinite(rank) && rank > 0 && Number.isFinite(points) && name && !seen.has(name)) {
-      rows.push({ rank, name, points: Math.round(points) });
-      seen.add(name);
-    }
-
-    Object.values(value).forEach(walk);
-  }
-
-  try {
-    walk(JSON.parse(scriptMatch[1]));
-  } catch (error) {
-    return [];
-  }
-
-  return rows.sort((a, b) => a.rank - b.rank).slice(0, 20);
-}
-
-function parseRankingsFromLooseJson(text) {
-  const rows = [];
-  const seen = new Set();
-  const matcher = /"rank"\s*:\s*(\d+)[\s\S]*?"fullName"\s*:\s*"([^"]+)"[\s\S]*?"points"\s*:\s*([\d.]+)/g;
-  let match;
-  while ((match = matcher.exec(text)) && rows.length < 20) {
-    const rank = Number(match[1]);
-    const name = match[2].trim();
-    const points = Math.round(Number(match[3]));
-    if (!name || seen.has(name)) continue;
-    rows.push({ rank, name, points });
-    seen.add(name);
-  }
-  return rows.sort((a, b) => a.rank - b.rank).slice(0, 20);
-}
-
-async function scrapeWslRankings(tour) {
-  const targetUrl = `https://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`;
-  const sources = [
-    `https://r.jina.ai/http://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
-  ];
-
-  for (const source of sources) {
-    try {
-      const response = await fetch(source);
-      if (!response.ok) continue;
-      const text = await response.text();
-      const rows = parseRankingsFromWslNextData(text);
-      const fallbackRows = rows.length ? rows : parseRankingsFromLooseJson(text);
-      if (fallbackRows.length) return fallbackRows;
-    } catch (error) {
-      // Try next source.
-    }
-  }
-
-  throw new Error(`Unable to scrape ${tour.toUpperCase()} rankings`);
-}
-
-function renderRankingTable(container, rows) {
-  if (!rows.length) {
-    container.innerHTML = '<p class="muted">Unable to load rankings right now.</p>';
-    return;
-  }
-
-  container.innerHTML = `
-    <table>
-      <thead>
-        <tr><th>Rank</th><th>Surfer</th><th>Points</th></tr>
-      </thead>
-      <tbody>
-        ${rows.map((row) => `<tr><td>${row.rank}</td><td>${row.name}</td><td>${row.points.toLocaleString()}</td></tr>`).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-async function loadRankings() {
-  mctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
-  wctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
-
-  const [men, women] = await Promise.allSettled([scrapeWslRankings('mct'), scrapeWslRankings('wct')]);
-  renderRankingTable(mctRankings, men.status === 'fulfilled' ? men.value : []);
-  renderRankingTable(wctRankings, women.status === 'fulfilled' ? women.value : []);
-  rankingsUpdatedAt.textContent = `Updated ${formatTimestamp(new Date())}`;
 }
 
 async function refreshDashboard() {
