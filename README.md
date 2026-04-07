@@ -1,23 +1,21 @@
 # Surfability Intelligence Dashboard
 
-A fully redesigned surf forecasting dashboard focused on the core question: **"Is it surfable right now?"**
+Global surf dashboard that answers **"is it surfable right now?"** across popular surf breaks worldwide.
 
-## What is new
+## Current feature set
 
-- **Instant Snapshot header panel** with Surf Score (1–10), wave height, swell, wind vector, tide state, and spot metadata.
-- **24-hour interactive timeline** combining wave height + color-coded Surf Score bars.
-- **7-day trend heatmap** for quick planning.
-- **Interactive map** with per-spot color-coded score pins and break-type popups.
-- **Detailed metrics** with radar-chart contribution breakdown (wave, swell, wind, tide).
-- **Alert cards** for optimal windows, wind shifts, and swell arrivals.
-- **Personalization control** to shift scoring by risk tolerance and surfer skill level.
+- Global map with popular surf locations across North America, Europe, Africa, Oceania, and Asia.
+- Click any map marker to instantly load that location's 24-hour surf timeline.
+- Snapshot panel for selected location (score, wave height, period, wind, break type).
+- Alerts panel for optimal windows, wind shifts, and swell arrivals.
+- **8-day forecast overview** styled as multi-row spot strips with day-by-day wave ranges and quality indicators.
 
-## Data architecture implemented
+## Data + architecture
 
-- NOAA CO-OPS tides via API.
-- NOAA NDBC buoy parser utility included.
-- Forecast ingestion via marine API fallback (Open-Meteo) with a uniform internal schema.
-- Client-side cache (`localStorage`) with **60-minute TTL** to limit repeated API calls.
+- Forecast ingestion uses Open-Meteo Marine hourly feed (public, no key).
+- Uniform row schema for all spots (`datetime`, `waveHeight`, `wavePeriod`, synthetic wind fields, `score`).
+- Client cache via `localStorage` with 60-minute TTL to minimize repeated API calls.
+- Internal surf scoring remains on a 1–10 scale and maps to Good/Fair/Poor UI states.
 
 ## Run locally
 
@@ -25,9 +23,4 @@ A fully redesigned surf forecasting dashboard focused on the core question: **"I
 python -m http.server 8000
 ```
 
-Then open: `http://localhost:8000`
-
-## Notes
-
-- The app is intentionally modular to allow Stormglass/OpenWeatherMap/WaveWatch adapters later without frontend rewrites.
-- Scoring logic remains internal on a 1–10 scale and maps to Good/Fair/Poor visual states.
+Open `http://localhost:8000`.

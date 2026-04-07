@@ -20,7 +20,7 @@
     <header class="topbar">
       <div>
         <h1>🌊 Surfability Intelligence Dashboard</h1>
-        <p>Real-time + 7-day decision support for “is it surfable right now?”</p>
+        <p>Global spot coverage, click-to-load timelines, and 8-day surf outlook.</p>
       </div>
       <div class="controls-inline">
         <label>Spot <select id="spotSelect"></select></label>
@@ -38,26 +38,13 @@
       <section class="panel snapshot" id="snapshotPanel"></section>
 
       <section class="panel timeline">
-        <div class="panel-head"><h2>24-Hour Surf Timeline</h2></div>
+        <div class="panel-head"><h2>24-Hour Surf Timeline (selected map spot)</h2></div>
         <canvas id="hourlyChart"></canvas>
       </section>
 
-      <section class="panel weekly">
-        <div class="panel-head"><h2>7-Day Trend Heatmap</h2></div>
-        <div id="weeklyHeatmap" class="heatmap"></div>
-      </section>
-
       <section class="panel map-panel">
-        <div class="panel-head"><h2>Spot Map</h2></div>
+        <div class="panel-head"><h2>Popular Surf Spots Map (click marker)</h2></div>
         <div id="surfMap"></div>
-      </section>
-
-      <section class="panel details">
-        <div class="panel-head"><h2>Detailed Spot Metrics</h2></div>
-        <div class="split">
-          <canvas id="radarChart"></canvas>
-          <div id="metricBreakdown"></div>
-        </div>
       </section>
 
       <section class="panel alerts">
@@ -65,12 +52,9 @@
         <div id="alertsList" class="alerts-list"></div>
       </section>
 
-      <section class="panel analytics">
-        <div class="panel-head"><h2>Condition Correlation & Personalization</h2></div>
-        <div class="analytics-controls">
-          <label>Personalization slider: <input type="range" id="riskSlider" min="0" max="100" value="50" /></label>
-        </div>
-        <canvas id="scatterChart"></canvas>
+      <section class="panel eight-day">
+        <div class="panel-head"><h2>8-Day Forecast Overview</h2></div>
+        <div id="eightDayGrid" class="eight-day-grid"></div>
       </section>
     </main>
 

@@ -1,117 +1,88 @@
 const SURF_SPOTS = [
-  {
-    name: 'Long Beach, NJ',
-    lat: 39.588,
-    lng: -74.218,
-    buoy: '44009',
-    tideStation: '8531680',
-    breakType: 'Beach Break',
-    icon: '🌊',
-    orientationDeg: 120,
-    exposure: 'south'
-  },
-  {
-    name: 'Belmar, NJ',
-    lat: 40.18,
-    lng: -74.016,
-    buoy: '44009',
-    tideStation: '8531680',
-    breakType: 'Beach Break',
-    icon: '🌊',
-    orientationDeg: 110,
-    exposure: 'south-east'
-  },
-  {
-    name: 'Manasquan Inlet, NJ',
-    lat: 40.107,
-    lng: -74.037,
-    buoy: '44009',
-    tideStation: '8531680',
-    breakType: 'Jetty/Reef',
-    icon: '🔺',
-    orientationDeg: 100,
-    exposure: 'east'
-  }
+  { name: 'Pipeline, Hawaii', lat: 21.664, lng: -158.051, breakType: 'Reef', orientationDeg: 320 },
+  { name: 'Lower Trestles, California', lat: 33.384, lng: -117.593, breakType: 'Cobblestone', orientationDeg: 230 },
+  { name: 'Snapper Rocks, Australia', lat: -28.164, lng: 153.548, breakType: 'Point', orientationDeg: 120 },
+  { name: 'Teahupoʻo, Tahiti', lat: -17.833, lng: -149.267, breakType: 'Reef', orientationDeg: 190 },
+  { name: 'Cloudbreak, Fiji', lat: -17.873, lng: 177.188, breakType: 'Reef', orientationDeg: 200 },
+  { name: 'Jeffreys Bay, South Africa', lat: -34.051, lng: 24.93, breakType: 'Point', orientationDeg: 140 },
+  { name: 'Hossegor, France', lat: 43.665, lng: -1.443, breakType: 'Beach', orientationDeg: 280 },
+  { name: 'Mundaka, Spain', lat: 43.408, lng: -2.699, breakType: 'Rivermouth', orientationDeg: 300 },
+  { name: 'Supertubos, Portugal', lat: 39.355, lng: -9.381, breakType: 'Beach', orientationDeg: 280 },
+  { name: 'Uluwatu, Bali', lat: -8.818, lng: 115.087, breakType: 'Reef', orientationDeg: 210 },
+  { name: 'Raglan, New Zealand', lat: -37.799, lng: 174.87, breakType: 'Point', orientationDeg: 250 },
+  { name: 'Punta de Lobos, Chile', lat: -34.413, lng: -72.035, breakType: 'Point', orientationDeg: 260 },
+  { name: 'Arugam Bay, Sri Lanka', lat: 6.839, lng: 81.836, breakType: 'Point', orientationDeg: 90 },
+  { name: 'Long Beach, New York', lat: 40.587, lng: -73.657, breakType: 'Beach', orientationDeg: 130 }
 ];
 
 const CACHE_MINUTES = 60;
 const spotSelect = document.getElementById('spotSelect');
 const skillSelect = document.getElementById('skillSelect');
 const snapshotPanel = document.getElementById('snapshotPanel');
-const weeklyHeatmap = document.getElementById('weeklyHeatmap');
 const alertsList = document.getElementById('alertsList');
-const riskSlider = document.getElementById('riskSlider');
+const eightDayGrid = document.getElementById('eightDayGrid');
 
-let charts = {};
 let map;
 let markers = [];
-let latestMerged = [];
+let hourlyChart;
+let selectedSpotName = SURF_SPOTS[0].name;
+const spotSeries = {};
 
-function metersToFeet(m) { return (m * 3.28084).toFixed(1); }
-function toCompass(deg = 0) {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const metersToFeet = (m) => m * 3.28084;
+const toCompass = (deg = 0) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+
+function scoreBand(score) {
+  if (score >= 8) return { label: 'Good', css: 'score-good', color: '#1ac36a' };
+  if (score >= 5) return { label: 'Fair', css: 'score-fair', color: '#f3be1a' };
+  return { label: 'Poor', css: 'score-poor', color: '#f28a06' };
 }
-function scoreBand(score10) {
-  if (score10 >= 8) return { label: 'Good', css: 'score-good', color: '#22c55e' };
-  if (score10 >= 5) return { label: 'Fair', css: 'score-fair', color: '#eab308' };
-  return { label: 'Poor', css: 'score-poor', color: '#ef4444' };
-}
+
 function signedAngle(a, b) {
   const d = ((a - b + 540) % 360) - 180;
   return Math.abs(d);
 }
 
-function computeSurfScore(row, spot, skill = 'Intermediate', riskBias = 50) {
-  const wave = row.waveHeight ?? 0.8;
-  const swellPeriod = row.swellPeriod ?? row.wavePeriod ?? 8;
+function buildRangeLabel(minFt, maxFt) {
+  const minRound = Math.max(0, Math.round(minFt));
+  const maxRound = Math.max(minRound + 1, Math.round(maxFt));
+  return `${minRound}-${maxRound}ft${maxFt >= 5.5 ? '+' : ''}`;
+}
+
+function dotColor(score) {
+  if (score >= 8) return '#1ac36a';
+  if (score >= 5) return '#f3be1a';
+  return '#f28a06';
+}
+
+function computeSurfScore(row, spot, skill) {
+  const waveFt = metersToFeet(row.waveHeight ?? 0.8);
+  const period = row.wavePeriod ?? 8;
   const windSpeed = row.windSpeed ?? 6;
   const windDir = row.windDirection ?? 0;
-  const swellDir = row.swellDirection ?? 0;
-  const tideFt = row.tideFt ?? 2;
 
-  const skillTargets = {
-    Beginner: { waveIdeal: 1.2, periodIdeal: 9 },
-    Intermediate: { waveIdeal: 2.2, periodIdeal: 11 },
-    Advanced: { waveIdeal: 3.8, periodIdeal: 13 }
+  const skillIdeal = {
+    Beginner: { wave: 2.0, period: 9 },
+    Intermediate: { wave: 4.0, period: 11 },
+    Advanced: { wave: 6.0, period: 13 }
   };
-  const target = skillTargets[skill] ?? skillTargets.Intermediate;
+  const target = skillIdeal[skill] || skillIdeal.Intermediate;
 
-  const waveFactor = Math.max(0, 1 - Math.abs(wave - target.waveIdeal) / (target.waveIdeal + 0.2));
-  const periodFactor = Math.min(Math.max((swellPeriod - 6) / (target.periodIdeal - 6), 0), 1);
+  const waveFactor = clamp(1 - Math.abs(waveFt - target.wave) / (target.wave + 0.75), 0, 1);
+  const periodFactor = clamp((period - 6) / (target.period - 6), 0, 1);
   const offshoreAngle = signedAngle((windDir + 180) % 360, spot.orientationDeg);
   const windDirFactor = 1 - offshoreAngle / 180;
-  const windSpeedFactor = Math.max(0, 1 - windSpeed / 18);
-  const tideFactor = 1 - Math.min(Math.abs(tideFt - 2.8) / 2.8, 1);
-  const exposurePenalty = spot.exposure.includes('south') && [315, 0, 45].some((d) => Math.abs(d - swellDir) < 25) ? 0.15 : 0;
+  const windSpeedFactor = clamp(1 - windSpeed / 18, 0, 1);
 
-  const base = (
-    waveFactor * 0.25 +
-    periodFactor * 0.25 +
-    windDirFactor * 0.2 +
-    windSpeedFactor * 0.1 +
-    tideFactor * 0.2
-  ) * 10;
-
-  const personalization = ((riskBias - 50) / 50) * (skill === 'Advanced' ? 0.8 : -0.8);
-  const score = Math.max(1, Math.min(10, base - exposurePenalty * 10 + personalization));
-
-  return {
-    score: Number(score.toFixed(1)),
-    contributions: {
-      wave: Number((waveFactor * 10).toFixed(1)),
-      period: Number((periodFactor * 10).toFixed(1)),
-      wind: Number((((windDirFactor + windSpeedFactor) / 2) * 10).toFixed(1)),
-      tide: Number((tideFactor * 10).toFixed(1))
-    }
-  };
+  const score = (waveFactor * 0.4 + periodFactor * 0.25 + windDirFactor * 0.2 + windSpeedFactor * 0.15) * 10;
+  return Number(clamp(score, 1, 10).toFixed(1));
 }
 
 async function fetchCached(key, loader) {
   const cacheKey = `surf-cache-${key}`;
-  const item = localStorage.getItem(cacheKey);
-  if (item) {
-    const parsed = JSON.parse(item);
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    const parsed = JSON.parse(cached);
     if (Date.now() - parsed.ts < CACHE_MINUTES * 60000) return parsed.data;
   }
   const data = await loader();
@@ -119,245 +90,235 @@ async function fetchCached(key, loader) {
   return data;
 }
 
-async function getNoaaBuoyData(buoyId) {
-  return fetchCached(`buoy-${buoyId}`, async () => {
-    const response = await fetch(`https://www.ndbc.noaa.gov/data/realtime2/${buoyId}.txt`);
-    const text = await response.text();
-    const lines = text.split('\n').slice(2, 50).filter(Boolean);
-    return lines.map((line) => {
-      const p = line.trim().split(/\s+/);
-      const dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2], +p[3], +p[4]));
-      return {
-        datetime: dt.toISOString(),
-        waveHeight: p[8] === 'MM' ? null : Number(p[8]),
-        wavePeriod: p[9] === 'MM' ? null : Number(p[9]),
-        windSpeed: p[6] === 'MM' ? null : Number(p[6]),
-        windDirection: p[5] === 'MM' ? null : Number(p[5])
-      };
-    });
-  });
-}
+async function fetchForecast(spot) {
+  return fetchCached(`forecast-${spot.lat}-${spot.lng}`, async () => {
+    const start = new Date().toISOString().slice(0, 10);
+    const end = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lng}&hourly=wave_height,wave_period&wind_speed_unit=ms&timezone=UTC&start_date=${start}&end_date=${end}`;
+    const response = await fetch(url);
+    const data = await response.json();
 
-async function getNoaaTideData(station) {
-  return fetchCached(`tide-${station}`, async () => {
-    const begin = new Date().toISOString().slice(0, 10).replaceAll('-', '');
-    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10).replaceAll('-', '');
-    const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=SurfForecastApp&begin_date=${begin}&end_date=${end}&datum=MLLW&station=${station}&time_zone=gmt&units=english&interval=h&format=json`;
-    const res = await fetch(url);
-    const json = await res.json();
-    return (json.predictions || []).map((r) => ({ datetime: new Date(r.t + 'Z').toISOString(), tideFt: Number(r.v) }));
-  });
-}
-
-async function getForecastFallback(lat, lng) {
-  return fetchCached(`forecast-${lat}-${lng}`, async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lng}&hourly=wave_height,wave_period&start_date=${today}&end_date=${end}&timezone=UTC`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return data.hourly.time.map((t, idx) => ({
+    if (!data?.hourly?.time?.length) throw new Error('No hourly forecast data returned');
+    return data.hourly.time.map((t, i) => ({
       datetime: new Date(t + 'Z').toISOString(),
-      waveHeight: data.hourly.wave_height[idx],
-      wavePeriod: data.hourly.wave_period[idx],
-      swellPeriod: data.hourly.wave_period[idx],
-      swellDirection: 130,
-      windSpeed: 5 + (idx % 7),
-      windDirection: 260 - (idx % 50)
+      waveHeight: data.hourly.wave_height[i] ?? 0.8,
+      wavePeriod: data.hourly.wave_period[i] ?? 8,
+      windSpeed: 5 + (i % 7),
+      windDirection: 210 + (i % 80)
     }));
   });
 }
 
-function mergeByNearest(forecast, tide) {
-  return forecast.map((f) => {
-    const ft = new Date(f.datetime).getTime();
-    let nearest = tide[0];
-    let best = Infinity;
-    for (const t of tide) {
-      const dist = Math.abs(new Date(t.datetime).getTime() - ft);
-      if (dist < best) { best = dist; nearest = t; }
-    }
-    return { ...f, tideFt: nearest?.tideFt ?? 2.5 };
+function buildDailySeries(rows, skill, spot) {
+  const buckets = {};
+  rows.forEach((r) => {
+    const day = r.datetime.slice(0, 10);
+    if (!buckets[day]) buckets[day] = [];
+    buckets[day].push({ ...r, score: computeSurfScore(r, spot, skill) });
   });
 }
 
-function renderSnapshot(spot, nowRow, scoreObj) {
-  const band = scoreBand(scoreObj.score);
+  return Object.entries(buckets).slice(0, 8).map(([day, dayRows]) => {
+    const heightsFt = dayRows.map((d) => metersToFeet(d.waveHeight));
+    const avgScore = dayRows.reduce((s, d) => s + d.score, 0) / dayRows.length;
+    return {
+      day,
+      dayLabel: new Date(day + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' }),
+      minFt: Math.min(...heightsFt),
+      maxFt: Math.max(...heightsFt),
+      avgScore: Number(avgScore.toFixed(1)),
+      sampleScores: dayRows.filter((_, idx) => idx % Math.ceil(dayRows.length / 3) === 0).slice(0, 3).map((d) => d.score)
+    };
+  });
+}
+
+function renderSnapshot(spot, nowRow, score) {
+  const band = scoreBand(score);
   snapshotPanel.innerHTML = `
     <div class="snapshot-grid">
-      <div class="metric-card ${band.css}"><div class="k">Surf Score (1-10)</div><div class="v">${scoreObj.score} · ${band.label}</div></div>
-      <div class="metric-card"><div class="k">Wave Height</div><div class="v">${metersToFeet(nowRow.waveHeight || 0.8)} ft</div></div>
-      <div class="metric-card"><div class="k">Swell</div><div class="v">${(nowRow.swellPeriod || nowRow.wavePeriod || 8).toFixed(1)}s @ ${toCompass(nowRow.swellDirection || 130)}</div></div>
-      <div class="metric-card"><div class="k">Wind Vector</div><div class="v">${(nowRow.windSpeed || 0).toFixed(1)} m/s ${toCompass(nowRow.windDirection || 0)}</div></div>
-      <div class="metric-card"><div class="k">Tide State</div><div class="v">${(nowRow.tideFt || 0).toFixed(1)} ft (mid-tide target 2.8)</div></div>
-      <div class="metric-card"><div class="k">Spot Metadata</div><div class="v">${spot.breakType} · ${spot.exposure}</div></div>
+      <div class="metric-card ${band.css}"><div class="k">Surf Score</div><div class="v">${score}/10 · ${band.label}</div></div>
+      <div class="metric-card"><div class="k">Wave Height</div><div class="v">${metersToFeet(nowRow.waveHeight).toFixed(1)} ft</div></div>
+      <div class="metric-card"><div class="k">Swell Period</div><div class="v">${(nowRow.wavePeriod ?? 8).toFixed(1)} s</div></div>
+      <div class="metric-card"><div class="k">Wind</div><div class="v">${(nowRow.windSpeed ?? 0).toFixed(1)} m/s ${toCompass(nowRow.windDirection)}</div></div>
+      <div class="metric-card"><div class="k">Break Type</div><div class="v">${spot.breakType}</div></div>
+      <div class="metric-card"><div class="k">Selected Spot</div><div class="v">${spot.name}</div></div>
     </div>`;
 }
 
-function renderWeeklyHeatmap(rows) {
-  weeklyHeatmap.innerHTML = '';
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const dayRows = rows.filter((r) => new Date(r.datetime).getUTCDate() === new Date(Date.now() + i * 86400000).getUTCDate());
-    if (!dayRows.length) continue;
-    const avg = dayRows.reduce((s, r) => s + r.score, 0) / dayRows.length;
-    days.push({
-      label: new Date(dayRows[0].datetime).toLocaleDateString(undefined, { weekday: 'short' }),
-      score: Number(avg.toFixed(1)),
-      tideRange: `${Math.min(...dayRows.map((d) => d.tideFt)).toFixed(1)}-${Math.max(...dayRows.map((d) => d.tideFt)).toFixed(1)}ft`
-    });
-  }
-  days.forEach((d) => {
-    const band = scoreBand(d.score);
-    const el = document.createElement('div');
-    el.className = 'heat-cell';
-    el.style.background = band.color + '40';
-    el.title = `${d.label}: ${d.score}/10`;
-    el.innerHTML = `<strong>${d.label}</strong><br/>Score ${d.score}<br/><small>${d.tideRange}</small>`;
-    weeklyHeatmap.appendChild(el);
-  });
-}
+function renderTimeline(rows) {
+  const next24 = rows.slice(0, 24);
+  const labels = next24.map((r) => new Date(r.datetime).getUTCHours().toString().padStart(2, '0') + ':00');
+  const heightsFt = next24.map((r) => Number(metersToFeet(r.waveHeight).toFixed(2)));
+  const scores = next24.map((r) => r.score);
 
-function renderMetricBreakdown(contrib, row) {
-  document.getElementById('metricBreakdown').innerHTML = `
-    <ul>
-      <li>Wave contribution: <strong>${contrib.wave}/10</strong></li>
-      <li>Swell-period contribution: <strong>${contrib.period}/10</strong></li>
-      <li>Wind contribution: <strong>${contrib.wind}/10</strong> (${toCompass(row.windDirection)} vector alignment)</li>
-      <li>Tide contribution: <strong>${contrib.tide}/10</strong></li>
-    </ul>
-    <p>Interpretation: wind is currently ${contrib.wind < 4 ? 'hurting' : 'helping'} the score.</p>`;
-}
-
-function renderAlerts(rows) {
-  const alerts = [];
-  const nextGood = rows.find((r) => r.score >= 8);
-  if (nextGood) alerts.push(`Optimal Window: Surf Score ${nextGood.score}+ predicted around ${new Date(nextGood.datetime).toLocaleString()}.`);
-  const shift = rows.find((r, i) => i > 0 && Math.abs((r.windDirection ?? 0) - (rows[i - 1].windDirection ?? 0)) > 40);
-  if (shift) alerts.push(`Critical Shift: Significant wind direction shift expected at ${new Date(shift.datetime).toLocaleTimeString()}.`);
-  const swellArrive = rows.find((r) => (r.waveHeight ?? 0) >= 1.8 && (r.swellPeriod ?? 0) >= 11);
-  if (swellArrive) alerts.push(`Swell Arrival: Threshold reached (${metersToFeet(swellArrive.waveHeight)}ft @ ${(swellArrive.swellPeriod).toFixed(1)}s).`);
-  alertsList.innerHTML = alerts.map((a) => `<div class="alert-item">${a}</div>`).join('') || '<p>No alerts at this time.</p>';
-}
-
-function renderCharts(rows, contrib) {
-  const labels = rows.slice(0, 24).map((r) => new Date(r.datetime).getUTCHours().toString().padStart(2, '0') + ':00');
-  const hourlyScores = rows.slice(0, 24).map((r) => r.score);
-  const heightsFt = rows.slice(0, 24).map((r) => Number(metersToFeet(r.waveHeight || 0.8)));
-
-  charts.hourly?.destroy();
-  charts.hourly = new Chart(document.getElementById('hourlyChart'), {
-    type: 'bar',
+  hourlyChart?.destroy();
+  hourlyChart = new Chart(document.getElementById('hourlyChart'), {
     data: {
       labels,
       datasets: [
-        { type: 'line', label: 'Wave Height (ft)', data: heightsFt, borderColor: '#38bdf8', yAxisID: 'y' },
-        { type: 'bar', label: 'Surf Score', data: hourlyScores, backgroundColor: hourlyScores.map((s) => scoreBand(s).color + 'aa'), yAxisID: 'y1' }
+        { type: 'line', label: 'Wave Height (ft)', data: heightsFt, borderColor: '#5aa3d8', backgroundColor: '#5aa3d820', yAxisID: 'y' },
+        { type: 'bar', label: 'Surf Score', data: scores, backgroundColor: scores.map((s) => scoreBand(s).color + 'cc'), yAxisID: 'y1' }
       ]
     },
-    options: { scales: { y: { beginAtZero: true }, y1: { beginAtZero: true, max: 10, position: 'right' } } }
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Wave Height (ft)' } },
+        y1: { beginAtZero: true, max: 10, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Surf Score' } }
+      }
+    }
   });
 
-  charts.radar?.destroy();
-  charts.radar = new Chart(document.getElementById('radarChart'), {
-    type: 'radar',
-    data: {
-      labels: ['Wave', 'Swell', 'Wind', 'Tide'],
-      datasets: [{ label: 'Component Strength', data: [contrib.wave, contrib.period, contrib.wind, contrib.tide], backgroundColor: '#22d3ee40', borderColor: '#22d3ee' }]
-    },
-    options: { scales: { r: { min: 0, max: 10 } } }
-  });
+function renderAlerts(rows) {
+  const alerts = [];
+  const best = rows.find((r) => r.score >= 8);
+  if (best) alerts.push(`Optimal Window: Score ${best.score} near ${new Date(best.datetime).toLocaleString()}.`);
 
-  charts.scatter?.destroy();
-  charts.scatter = new Chart(document.getElementById('scatterChart'), {
-    type: 'scatter',
-    data: {
-      datasets: [{
-        label: 'Period vs Score',
-        data: rows.slice(0, 72).map((r) => ({ x: r.swellPeriod || r.wavePeriod || 8, y: r.score })),
-        backgroundColor: '#60a5fa'
-      }]
-    },
-    options: { scales: { x: { title: { text: 'Swell Period (s)', display: true } }, y: { title: { text: 'Surf Score', display: true }, min: 0, max: 10 } } }
+  const windShift = rows.find((r, i) => i > 0 && Math.abs((r.windDirection ?? 0) - (rows[i - 1].windDirection ?? 0)) >= 45);
+  if (windShift) alerts.push(`Critical Shift: wind rotation expected around ${new Date(windShift.datetime).toLocaleTimeString()}.`);
+
+  const swellArrival = rows.find((r) => metersToFeet(r.waveHeight) >= 5 && (r.wavePeriod ?? 8) >= 11);
+  if (swellArrival) alerts.push(`Swell Arrival: ${metersToFeet(swellArrival.waveHeight).toFixed(1)}ft @ ${swellArrival.wavePeriod.toFixed(1)}s.`);
+
+  alertsList.innerHTML = alerts.length
+    ? alerts.map((a) => `<div class="alert-item">${a}</div>`).join('')
+    : '<div class="alert-item">No critical alerts at this moment.</div>';
+}
+
+function renderEightDayOverview() {
+  eightDayGrid.innerHTML = '';
+
+  SURF_SPOTS.forEach((spot) => {
+    const rows = spotSeries[spot.name] || [];
+    if (!rows.length) return;
+    const daily = buildDailySeries(rows, skillSelect.value, spot);
+
+    const row = document.createElement('div');
+    row.className = 'forecast-row';
+
+    const name = document.createElement('div');
+    name.className = 'row-name';
+    name.textContent = spot.name;
+
+    const days = document.createElement('div');
+    days.className = 'day-columns';
+
+    daily.forEach((d) => {
+      const cell = document.createElement('div');
+      cell.className = 'day-cell';
+      const fillPct = clamp((d.maxFt / 8) * 100, 8, 100);
+      const range = buildRangeLabel(d.minFt, d.maxFt);
+      const dots = d.sampleScores.map((s) => `<span style="background:${dotColor(s)}"></span>`).join('');
+      cell.innerHTML = `
+        <div class="day-label">${d.dayLabel}</div>
+        <div class="range">${range}</div>
+        <div class="condition-dots">${dots}</div>
+        <div class="wave-strip"><div class="wave-fill" style="width:${fillPct}%"></div></div>
+      `;
+      days.appendChild(cell);
+    });
+
+    row.appendChild(name);
+    row.appendChild(days);
+    eightDayGrid.appendChild(row);
   });
 }
 
 function initMap() {
-  map = L.map('surfMap').setView([39.95, -74.1], 8);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  map = L.map('surfMap').setView([15, -25], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 }
 
-function refreshMap(selectedName) {
+function renderMap() {
   markers.forEach((m) => m.remove());
   markers = [];
+
   SURF_SPOTS.forEach((spot) => {
-    const rows = latestMerged[spot.name] || [];
-    const top = rows[0]?.score ?? 5;
-    const band = scoreBand(top);
-    const marker = L.circleMarker([spot.lat, spot.lng], { radius: 9, color: band.color, fillOpacity: 0.9 }).addTo(map);
-    marker.bindPopup(`<strong>${spot.icon} ${spot.name}</strong><br/>${spot.breakType}<br/>Score: ${top}/10`);
-    if (spot.name === selectedName) marker.openPopup();
+    const score = spotSeries[spot.name]?.[0]?.score ?? 5;
+    const band = scoreBand(score);
+    const marker = L.circleMarker([spot.lat, spot.lng], {
+      radius: 8,
+      color: band.color,
+      fillOpacity: 0.9,
+      weight: 2
+    }).addTo(map);
+
+    marker.bindPopup(`<strong>${spot.name}</strong><br/>${spot.breakType}<br/>Score ${score}/10`);
+    marker.on('click', () => {
+      selectedSpotName = spot.name;
+      spotSelect.value = spot.name;
+      updateSelectedSpot();
+    });
+
     markers.push(marker);
   });
 }
 
-async function loadSpotData(spot) {
-  let forecast;
-  try {
-    forecast = await getForecastFallback(spot.lat, spot.lng);
-  } catch {
-    forecast = Array.from({ length: 168 }, (_, i) => ({
-      datetime: new Date(Date.now() + i * 3600000).toISOString(),
-      waveHeight: 0.8 + Math.sin(i / 5) * 0.4 + 0.5,
-      wavePeriod: 8 + (i % 6),
-      swellPeriod: 9 + (i % 5),
-      swellDirection: 130,
-      windSpeed: 4 + (i % 8),
-      windDirection: 250 - (i % 60)
-    }));
-  }
-  let tide = await getNoaaTideData(spot.tideStation).catch(() => []);
-  if (!tide.length) tide = forecast.map((f, i) => ({ datetime: f.datetime, tideFt: 2.5 + Math.sin(i / 3) }));
+function updateSelectedSpot() {
+  const spot = SURF_SPOTS.find((s) => s.name === selectedSpotName) || SURF_SPOTS[0];
+  const rows = spotSeries[spot.name] || [];
+  if (!rows.length) return;
 
-  const merged = mergeByNearest(forecast, tide);
-  latestMerged[spot.name] = merged;
+  const now = rows[0];
+  renderSnapshot(spot, now, now.score);
+  renderTimeline(rows);
+  renderAlerts(rows);
 }
 
-async function refreshDashboard() {
-  const spot = SURF_SPOTS.find((s) => s.name === spotSelect.value) || SURF_SPOTS[0];
-  const skill = skillSelect.value;
-  const riskBias = Number(riskSlider.value);
+async function loadAllSpots() {
+  await Promise.all(
+    SURF_SPOTS.map(async (spot) => {
+      let rows;
+      try {
+        rows = await fetchForecast(spot);
+      } catch {
+        rows = Array.from({ length: 192 }, (_, i) => ({
+          datetime: new Date(Date.now() + i * 3600000).toISOString(),
+          waveHeight: 0.7 + Math.sin(i / 7) * 0.25 + (Math.random() * 0.45),
+          wavePeriod: 8 + (i % 7),
+          windSpeed: 5 + (i % 8),
+          windDirection: 210 + (i % 80)
+        }));
+      }
 
-  if (!latestMerged[spot.name]) await loadSpotData(spot);
-  const rows = latestMerged[spot.name].map((r) => {
-    const scoreObj = computeSurfScore(r, spot, skill, riskBias);
-    return { ...r, score: scoreObj.score, contributions: scoreObj.contributions };
+      const scored = rows.map((r) => ({ ...r, score: computeSurfScore(r, spot, skillSelect.value) }));
+      spotSeries[spot.name] = scored;
+    })
+  );
+}
+
+async function refreshForSkillChange() {
+  SURF_SPOTS.forEach((spot) => {
+    const rows = spotSeries[spot.name] || [];
+    spotSeries[spot.name] = rows.map((r) => ({ ...r, score: computeSurfScore(r, spot, skillSelect.value) }));
   });
-
-  const nowRow = rows[0];
-  renderSnapshot(spot, nowRow, { score: nowRow.score });
-  renderWeeklyHeatmap(rows);
-  renderMetricBreakdown(nowRow.contributions, nowRow);
-  renderAlerts(rows);
-  renderCharts(rows, nowRow.contributions);
-  refreshMap(spot.name);
+  renderMap();
+  renderEightDayOverview();
+  updateSelectedSpot();
 }
 
 async function boot() {
-  SURF_SPOTS.forEach((s) => {
-    const opt = document.createElement('option');
-    opt.textContent = s.name;
-    spotSelect.appendChild(opt);
+  SURF_SPOTS.forEach((spot) => {
+    const option = document.createElement('option');
+    option.value = spot.name;
+    option.textContent = spot.name;
+    spotSelect.appendChild(option);
   });
   spotSelect.value = SURF_SPOTS[0].name;
 
   initMap();
-  await Promise.all(SURF_SPOTS.map((s) => loadSpotData(s)));
-  await refreshDashboard();
+  await loadAllSpots();
+  renderMap();
+  renderEightDayOverview();
+  updateSelectedSpot();
 
-  spotSelect.addEventListener('change', refreshDashboard);
-  skillSelect.addEventListener('change', refreshDashboard);
-  riskSlider.addEventListener('input', refreshDashboard);
+  spotSelect.addEventListener('change', () => {
+    selectedSpotName = spotSelect.value;
+    updateSelectedSpot();
+  });
+
+  skillSelect.addEventListener('change', refreshForSkillChange);
 }
 
 boot();
