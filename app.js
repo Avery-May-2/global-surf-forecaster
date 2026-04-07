@@ -113,6 +113,7 @@ const surfSpots = [
 
 const FORECAST_DAYS = 6;
 const RANKINGS_REFRESH_MS = 15 * 60 * 1000;
+const RANKINGS_DEBUG = new URLSearchParams(window.location.search).get('debugRankings') === '1';
 const hasLeaflet = typeof window.L !== 'undefined';
 const hasChartJs = typeof window.Chart !== 'undefined';
 let map = null;
@@ -427,15 +428,22 @@ function parseRankingsFromMarkdown(text) {
   const rows = [];
   const lines = text.split('\n').filter((line) => line.includes('|'));
 
+  function toNumericString(value = '') {
+    const cleaned = String(value).replace(/,/g, '').replace(/[^\d.-]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? String(Math.round(n)) : '0';
+  }
+
   for (const line of lines) {
     if (!/^\d+\s*\|/.test(line.trim())) continue;
     const cols = line.split('|').map((c) => c.trim()).filter(Boolean);
-    if (cols.length < 5) continue;
+    if (cols.length < 4) continue;
 
     const rank = cols[0];
     const movement = cols[1] || '-';
-    const nameAndCountry = cols[3] || '';
-    const points = cols[cols.length - 1].replace(/,/g, '');
+    const points = toNumericString(cols[cols.length - 1]);
+    const nameCols = cols.slice(2, -1);
+    const nameAndCountry = nameCols.join(' ').replace(/\s+/g, ' ').trim();
     const { surfer, country } = parseCountryFromName(nameAndCountry);
 
     rows.push({
@@ -444,7 +452,7 @@ function parseRankingsFromMarkdown(text) {
       surfer,
       country,
       countryCode: countryToIso2(country),
-      points: String(Number(points) || 0),
+      points,
       photo: ''
     });
 
@@ -465,12 +473,15 @@ function parseRankingsFromJsonText(text) {
   }
 
   function tryAddRankRow(candidate = {}) {
-    const rankValue = toNumber(candidate.rank ?? candidate.liveRank ?? candidate.position ?? NaN);
-    const pointsValue = toNumber(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? NaN);
+    const rankValue = toNumber(candidate.rank ?? candidate.liveRank ?? candidate.position ?? candidate.currentRank ?? NaN);
+    const pointsValue = toNumber(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? candidate.currentPoints ?? NaN);
     const surfer = String(
       candidate.fullName
       || candidate.name
+      || candidate.displayName
+      || candidate.surferName
       || [candidate.firstName, candidate.lastName].filter(Boolean).join(' ')
+      || [candidate.givenName, candidate.familyName].filter(Boolean).join(' ')
       || ''
     ).trim();
 
@@ -546,27 +557,41 @@ async function fetchWslRankings(tour) {
   });
 
   let lastError = new Error('Unknown rankings fetch failure');
+  const attempts = [];
 
   for (const url of sources) {
     try {
       const response = await fetch(url);
-      if (!response.ok) continue;
+      if (!response.ok) {
+        attempts.push({ url, ok: false, status: response.status, parsedRows: 0 });
+        continue;
+      }
       const text = await response.text();
       const parsedJson = parseRankingsFromJsonText(text);
       const parsed = parsedJson.length ? parsedJson : parseRankingsFromMarkdown(text);
-      if (!parsed.length) continue;
-      return parsed.map((row) => ({ ...row, photo: row.photo || fallbackPhoto(row.surfer) }));
+      if (!parsed.length) {
+        attempts.push({ url, ok: true, status: response.status, parsedRows: 0 });
+        continue;
+      }
+      const rows = parsed.map((row) => ({ ...row, photo: row.photo || fallbackPhoto(row.surfer) }));
+      attempts.push({ url, ok: true, status: response.status, parsedRows: rows.length });
+      return { rows, attempts };
     } catch (error) {
       lastError = error;
+      attempts.push({ url, ok: false, status: 'error', parsedRows: 0, message: String(error?.message || error) });
     }
   }
 
+  lastError.attempts = attempts;
   throw lastError;
 }
 
-function renderRankingTable(el, rows) {
+function renderRankingTable(el, rows, attempts = []) {
   if (!rows.length) {
-    el.innerHTML = '<p class="muted">Unable to load rankings right now.</p>';
+    const debugBlock = RANKINGS_DEBUG && attempts.length
+      ? `<pre class="muted" style="white-space:pre-wrap;margin-top:0.6rem;">${attempts.map((a) => `${a.status} • ${a.parsedRows} rows • ${a.url}`).join('\n')}</pre>`
+      : '';
+    el.innerHTML = `<p class="muted">Unable to load rankings right now.</p>${debugBlock}`;
     return;
   }
 
@@ -606,8 +631,13 @@ async function loadRankings() {
 
   const [menResult, womenResult] = await Promise.allSettled([fetchWslRankings('mct'), fetchWslRankings('wct')]);
 
-  renderRankingTable(mctRankings, menResult.status === 'fulfilled' ? menResult.value : []);
-  renderRankingTable(wctRankings, womenResult.status === 'fulfilled' ? womenResult.value : []);
+  const menRows = menResult.status === 'fulfilled' ? menResult.value.rows : [];
+  const womenRows = womenResult.status === 'fulfilled' ? womenResult.value.rows : [];
+  const menAttempts = menResult.status === 'fulfilled' ? menResult.value.attempts : (menResult.reason?.attempts || []);
+  const womenAttempts = womenResult.status === 'fulfilled' ? womenResult.value.attempts : (womenResult.reason?.attempts || []);
+
+  renderRankingTable(mctRankings, menRows, menAttempts);
+  renderRankingTable(wctRankings, womenRows, womenAttempts);
 }
 
 async function refreshDashboard() {
