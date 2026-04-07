@@ -116,6 +116,7 @@ function buildDailySeries(rows, skill, spot) {
     if (!buckets[day]) buckets[day] = [];
     buckets[day].push({ ...r, score: computeSurfScore(r, spot, skill) });
   });
+}
 
   return Object.entries(buckets).slice(0, 8).map(([day, dayRows]) => {
     const heightsFt = dayRows.map((d) => metersToFeet(d.waveHeight));
@@ -168,7 +169,6 @@ function renderTimeline(rows) {
       }
     }
   });
-}
 
 function renderAlerts(rows) {
   const alerts = [];
@@ -305,6 +305,7 @@ async function boot() {
     option.textContent = spot.name;
     spotSelect.appendChild(option);
   });
+  spotSelect.value = SURF_SPOTS[0].name;
 
   initMap();
   await loadAllSpots();
