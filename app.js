@@ -265,8 +265,6 @@ function initMap() {
 }
 
 function renderMap() {
-  if (typeof L === 'undefined' || !map) return;
-
   markers.forEach((marker) => marker.remove());
   markers = [];
 
