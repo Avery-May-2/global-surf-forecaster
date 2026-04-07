@@ -10,9 +10,6 @@ A browser-based dashboard for exploring wave forecasts at world-tour-level surf 
 - **Time-of-day wave chart** for hourly wave height on a selected day.
 - By-day cards with wave snapshots throughout each day.
 - Summary card with event window, wave height stats, swell period, wind, and skill suitability.
-- **Live Championship Tour rankings** panel for both:
-  - Men (MCT)
-  - Women (WCT)
 
 ## Run locally
 
@@ -27,4 +24,3 @@ Then open `http://localhost:8000`.
 ## Notes
 
 - Wave forecast data is sourced live from Open-Meteo Marine API.
-- Rankings are fetched from World Surf League pages using a text mirror so they can be loaded client-side.
