@@ -456,25 +456,65 @@ function parseRankingsFromMarkdown(text) {
 
 function parseRankingsFromJsonText(text) {
   const byAthlete = new Map();
-  const entryRegex = /\{[^{}]*"rank"\s*:\s*(\d+)[^{}]*"fullName"\s*:\s*"([^"]+)"[^{}]*"points"\s*:\s*([\d.]+)[^{}]*\}/g;
-  let match;
 
-  while ((match = entryRegex.exec(text)) && byAthlete.size < 40) {
-    const block = match[0];
-    const country = (block.match(/"country"\s*:\s*"([^"]+)"/) || [])[1] || '';
-    const countryCode = (block.match(/"countryCode"\s*:\s*"([A-Z]{2})"/) || [])[1] || countryToIso2(country);
-    const movement = (block.match(/"(?:rankChange|liveMovement|movement|change)"\s*:\s*"?([+−\-\d]+)"?/) || [])[1] || '-';
-    const photo = (block.match(/"(?:imageUrl|headshot|photoUrl|avatarUrl)"\s*:\s*"([^"]+)"/) || [])[1] || '';
+  function tryAddRankRow(candidate = {}) {
+    const rankValue = Number(candidate.rank ?? candidate.liveRank ?? candidate.position ?? NaN);
+    const pointsValue = Number(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? NaN);
+    const surfer = String(
+      candidate.fullName
+      || candidate.name
+      || [candidate.firstName, candidate.lastName].filter(Boolean).join(' ')
+      || ''
+    ).trim();
 
-    byAthlete.set(match[2], {
-      rank: match[1],
-      surfer: match[2],
-      points: String(Math.round(Number(match[3]))),
+    if (!Number.isFinite(rankValue) || rankValue <= 0 || !Number.isFinite(pointsValue) || !surfer) return;
+    if (byAthlete.has(surfer)) return;
+
+    const country = candidate.country || candidate.nation || candidate.nationality || '';
+    const countryCode = (candidate.countryCode || candidate.iso2 || '').toUpperCase() || countryToIso2(country);
+    const movement = String(candidate.rankChange ?? candidate.liveMovement ?? candidate.movement ?? candidate.change ?? '-');
+    const photo = candidate.imageUrl || candidate.headshot || candidate.photoUrl || candidate.avatarUrl || '';
+
+    byAthlete.set(surfer, {
+      rank: String(rankValue),
+      surfer,
+      points: String(Math.round(pointsValue)),
       movement,
       country,
       countryCode,
       photo
     });
+  }
+
+  function walk(value) {
+    if (byAthlete.size >= 40 || value == null) return;
+
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    if (typeof value !== 'object') return;
+
+    tryAddRankRow(value);
+    Object.values(value).forEach(walk);
+  }
+
+  const nextDataMatch = text.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+  if (nextDataMatch) {
+    try {
+      walk(JSON.parse(nextDataMatch[1]));
+    } catch (error) {
+      // Fall through to plain-text parsing.
+    }
+  }
+
+  if (!byAthlete.size) {
+    const looseRegex = /\{[^{}]*"rank"\s*:\s*(\d+)[^{}]*"(?:fullName|name)"\s*:\s*"([^"]+)"[^{}]*"points"\s*:\s*([\d.]+)[^{}]*\}/g;
+    let match;
+    while ((match = looseRegex.exec(text)) && byAthlete.size < 40) {
+      tryAddRankRow({ rank: match[1], fullName: match[2], points: match[3] });
+    }
   }
 
   return Array.from(byAthlete.values()).sort((a, b) => Number(a.rank) - Number(b.rank)).slice(0, 20);
@@ -552,18 +592,10 @@ async function loadRankings() {
   mctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
   wctRankings.innerHTML = '<p class="muted">Loading rankings…</p>';
 
-  const fallbackRows = [
-    { rank: '-', movement: '-', surfer: 'Rankings temporarily unavailable', country: '', countryCode: '', points: '-', photo: fallbackPhoto('WSL') }
-  ];
+  const [menResult, womenResult] = await Promise.allSettled([fetchWslRankings('mct'), fetchWslRankings('wct')]);
 
-  try {
-    const [men, women] = await Promise.all([fetchWslRankings('mct'), fetchWslRankings('wct')]);
-    renderRankingTable(mctRankings, men);
-    renderRankingTable(wctRankings, women);
-  } catch (error) {
-    renderRankingTable(mctRankings, fallbackRows);
-    renderRankingTable(wctRankings, fallbackRows);
-  }
+  renderRankingTable(mctRankings, menResult.status === 'fulfilled' ? menResult.value : []);
+  renderRankingTable(wctRankings, womenResult.status === 'fulfilled' ? womenResult.value : []);
 }
 
 async function refreshDashboard() {
