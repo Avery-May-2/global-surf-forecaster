@@ -3,74 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Global Surf Forecast Dashboard</title>
+    <title>Surfability Intelligence Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="page-header">
-      <h1>🌊 Global Surf Forecast Dashboard</h1>
-      <p>Explore 2026 Championship Tour spots, real-time rolling wave forecasts, and hourly timing.</p>
+    <noscript><div style="padding:1rem;background:#fff3cd;color:#5c4500;border-bottom:1px solid #f0d98c;">JavaScript is required to render live forecasts.</div></noscript>
+    <header class="topbar">
+      <div>
+        <h1>🌊 Surfability Intelligence Dashboard</h1>
+        <p>Global spot coverage, click-to-load timelines, and 8-day surf outlook.</p>
+      </div>
+      <div class="controls-inline">
+        <label>Spot <select id="spotSelect"></select></label>
+        <label>Skill
+          <select id="skillSelect">
+            <option>Beginner</option>
+            <option selected>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+        </label>
+      </div>
     </header>
 
-    <main class="layout">
+    <main class="dashboard-grid">
+      <section class="panel snapshot" id="snapshotPanel"><p class="chart-fallback">Initializing dashboard…</p></section>
+
+      <section class="panel timeline">
+        <div class="panel-head"><h2>24-Hour Surf Timeline (selected map spot)</h2></div>
+        <canvas id="hourlyChart"></canvas>
+      </section>
+
       <section class="panel map-panel">
-        <div id="map" aria-label="Map of surf spots"></div>
+        <div class="panel-head"><h2>Popular Surf Spots Map (click marker)</h2></div>
+        <div id="surfMap"></div>
       </section>
 
-      <section class="panel controls-panel">
-        <h2>Forecast Controls</h2>
-
-        <label for="spot-select">Surf Spot</label>
-        <select id="spot-select"></select>
-
-        <label for="window-range">
-          Forecast Window:
-          <span id="window-value">6</span> days
-          <span id="window-dates" class="muted-inline">(today + 5 days)</span>
-        </label>
-        <input id="window-range" type="range" min="1" max="6" value="6" />
-
-        <label for="skill-level">Rider Skill</label>
-        <select id="skill-level">
-          <option value="beginner">Beginner</option>
-          <option value="intermediate" selected>Intermediate</option>
-          <option value="advanced">Advanced</option>
-        </select>
-
-        <div class="card" id="conditions-summary" aria-live="polite"></div>
+      <section class="panel alerts">
+        <div class="panel-head"><h2>Alerts & Notifications</h2></div>
+        <div id="alertsList" class="alerts-list"><div class="alert-item">Initializing alert engine…</div></div>
       </section>
 
-      <section class="panel chart-panel">
-        <h2>Wave Height Forecast (meters)</h2>
-        <canvas id="forecast-chart" aria-label="Wave height forecast chart"></canvas>
+      <section class="panel eight-day">
+        <div class="panel-head"><h2>8-Day Forecast Overview</h2></div>
+        <div id="eightDayGrid" class="eight-day-grid"><p class="chart-fallback">Preparing 8-day overview…</p></div>
       </section>
-
-      <section class="panel hourly-panel">
-        <div class="hourly-head">
-          <h2>Time-of-day Wave Chart</h2>
-          <label for="hourly-day-select">Day</label>
-          <select id="hourly-day-select" aria-label="Pick day for time-of-day chart"></select>
-        </div>
-        <canvas id="hourly-chart" aria-label="Hourly wave chart"></canvas>
-      </section>
-
-      <section class="panel by-day-panel">
-        <h2>By-day & Time-of-day Wave Outlook</h2>
-        <div id="by-day-forecast" class="by-day-grid" aria-live="polite"></div>
-      </section>
-
     </main>
 
     <script
@@ -78,7 +64,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
