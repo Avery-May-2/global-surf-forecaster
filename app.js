@@ -457,9 +457,16 @@ function parseRankingsFromMarkdown(text) {
 function parseRankingsFromJsonText(text) {
   const byAthlete = new Map();
 
+  function toNumber(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string') return Number.NaN;
+    const normalized = value.replace(/,/g, '').replace(/[^\d.+-]/g, '');
+    return Number(normalized);
+  }
+
   function tryAddRankRow(candidate = {}) {
-    const rankValue = Number(candidate.rank ?? candidate.liveRank ?? candidate.position ?? NaN);
-    const pointsValue = Number(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? NaN);
+    const rankValue = toNumber(candidate.rank ?? candidate.liveRank ?? candidate.position ?? NaN);
+    const pointsValue = toNumber(candidate.points ?? candidate.totalPoints ?? candidate.livePoints ?? NaN);
     const surfer = String(
       candidate.fullName
       || candidate.name
@@ -526,12 +533,17 @@ function fallbackPhoto(name = '') {
 }
 
 async function fetchWslRankings(tour) {
-  const pageUrl = `https://www.worldsurfleague.com/athletes/tour/${tour}?year=2026`;
-  const sources = [
-    `https://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
-    `https://r.jina.ai/http://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`
-  ];
+  const currentYear = new Date().getUTCFullYear();
+  const years = [currentYear, currentYear - 1];
+  const sources = years.flatMap((year) => {
+    const pageUrl = `https://www.worldsurfleague.com/athletes/tour/${tour}?year=${year}`;
+    return [
+      pageUrl,
+      `https://origin.worldsurfleague.com/athletes/tour/${tour}?year=${year}`,
+      `https://r.jina.ai/http://${pageUrl.replace('https://', '')}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(pageUrl)}`
+    ];
+  });
 
   let lastError = new Error('Unknown rankings fetch failure');
 
