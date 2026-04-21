@@ -17,10 +17,6 @@ Global surf dashboard that answers **"is it surfable right now?"** across popula
 - Client cache via `localStorage` with 60-minute TTL to minimize repeated API calls.
 - Internal surf scoring remains on a 1–10 scale and maps to Good/Fair/Poor UI states.
 
-## Run locally
+## Dashboard
 
-```bash
-python -m http.server 8000
-```
-
-Open `http://localhost:8000`.
+Access the Dashboard here: [Surf Intelligence Dashboard](https://avery-may-2.github.io/global-surf-forecaster/)
